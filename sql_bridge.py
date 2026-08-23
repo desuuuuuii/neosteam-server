@@ -1,4 +1,9 @@
 # -*- coding: utf-8 -*-
+"""
+Full MS SQL Emulation Bridge for NeoSteam Server
+Accurately maps UserList, UserList_Private, AdminParams, CharacterList
+"""
+
 import socket
 import struct
 import threading
@@ -16,30 +21,47 @@ def log_msg(msg):
             f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}\n")
     except: pass
 
-def init_db():
+def get_db_connection():
     conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    conn.create_function('DATEDIFF', 3, lambda unit, d1, d2: 0)
+    conn.create_function('GETDATE', 0, lambda: time.strftime('%Y-%m-%d %H:%M:%S'))
+    return conn
+
+def init_db():
+    conn = get_db_connection()
     cur = conn.cursor()
-    cur.executescript('''
+    cur.executescript("""
     CREATE TABLE IF NOT EXISTS UserList (
         Seq INTEGER PRIMARY KEY AUTOINCREMENT,
         UserId TEXT UNIQUE COLLATE NOCASE,
-        UserPasswd TEXT,
-        UserPasswdSha TEXT DEFAULT '',
-        UserMail TEXT DEFAULT '',
-        UserStat INTEGER DEFAULT 0,
-        UserType INTEGER DEFAULT 1,
         ConnGameIp1 INTEGER DEFAULT 0,
         ConnGameIp2 INTEGER DEFAULT 0,
         ConnGameIp3 INTEGER DEFAULT 0,
         ConnGameIp4 INTEGER DEFAULT 0,
         ConnGamePort INTEGER DEFAULT 0,
+        BlockDate TEXT DEFAULT NULL,
+        BlockComment TEXT DEFAULT '',
+        PcBangCheck INTEGER DEFAULT 0,
         LoginTime TEXT DEFAULT '',
-        LogoutTime TEXT DEFAULT '',
-        CharCount INTEGER DEFAULT 0
+        LogoutTime TEXT DEFAULT ''
+    );
+    CREATE TABLE IF NOT EXISTS UserList_Private (
+        UserId TEXT PRIMARY KEY COLLATE NOCASE,
+        Password TEXT DEFAULT '1234'
+    );
+    CREATE TABLE IF NOT EXISTS AdminParams (
+        UserId TEXT PRIMARY KEY COLLATE NOCASE,
+        Level INTEGER DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS UserAliasList (
+        AliasSeq INTEGER PRIMARY KEY AUTOINCREMENT,
+        UserSeq INTEGER DEFAULT 1,
+        UserAlias TEXT DEFAULT 'Hero'
     );
     CREATE TABLE IF NOT EXISTS CharacterList (
         CharSeq INTEGER PRIMARY KEY AUTOINCREMENT,
-        UserSeq INTEGER,
+        UserSeq INTEGER DEFAULT 1,
         CharName TEXT UNIQUE,
         Nation INTEGER DEFAULT 1,
         Job INTEGER DEFAULT 1,
@@ -62,25 +84,26 @@ def init_db():
         DeleteFlag INTEGER DEFAULT 0,
         CreateTime TEXT DEFAULT ''
     );
-    INSERT OR IGNORE INTO UserList (UserId, UserPasswd, UserType) VALUES ('admin', '1234', 2);
-    INSERT OR IGNORE INTO UserList (UserId, UserPasswd, UserType) VALUES ('test', '1234', 1);
-    INSERT OR IGNORE INTO UserList (UserId, UserPasswd, UserType) VALUES ('zevan', '1234', 1);
-    ''')
+    
+    INSERT OR IGNORE INTO UserList (UserId) VALUES ('admin'), ('test'), ('zevan');
+    INSERT OR IGNORE INTO UserList_Private (UserId, Password) VALUES ('admin', '1234'), ('test', '1234'), ('zevan', '1234');
+    INSERT OR IGNORE INTO AdminParams (UserId, Level) VALUES ('admin', 99), ('test', 1), ('zevan', 99);
+    """)
     conn.commit()
     conn.close()
-    log_msg("SQLite Database Initialized!")
+    log_msg("SQLite Database Schema Initialized!")
 
 def execute_sql(query_text):
     try:
         q = query_text.strip()
         if not q: return None, None
 
-        log_msg(f"SQL QUERY: {q}")
+        log_msg(f"SQL RAW: {q}")
 
-        conn = sqlite3.connect(DB_PATH)
-        conn.row_factory = sqlite3.Row
+        conn = get_db_connection()
         cur = conn.cursor()
 
+        # 1. Clean query of MS SQL specifics
         q_clean = re.sub(r'WITH\s*\(NOLOCK\)', '', q, flags=re.IGNORECASE)
         q_clean = re.sub(r'TOP\s+\d+', '', q_clean, flags=re.IGNORECASE)
         q_clean = re.sub(r'NOCOUNT\s+ON', '', q_clean, flags=re.IGNORECASE)
@@ -89,19 +112,24 @@ def execute_sql(query_text):
         q_clean = re.sub(r'\bdbo\.', '', q_clean, flags=re.IGNORECASE)
         q_clean = re.sub(r'\bMain_DB_1\.', '', q_clean, flags=re.IGNORECASE)
         q_clean = re.sub(r'\bGame_DB_1_1\.', '', q_clean, flags=re.IGNORECASE)
-        q_clean = re.sub(r'GETDATE\(\)', "datetime('now')", q_clean, flags=re.IGNORECASE)
         q_clean = re.sub(r'@@IDENTITY', 'last_insert_rowid()', q_clean, flags=re.IGNORECASE)
+        
+        # 2. Transform MS SQL functions to SQLite functions
+        q_clean = re.sub(r'\bISNULL\s*\(', 'IFNULL(', q_clean, flags=re.IGNORECASE)
+        q_clean = re.sub(r'\bDATEDIFF\s*\(\s*MI\s*,', "DATEDIFF('MI',", q_clean, flags=re.IGNORECASE)
+        q_clean = re.sub(r'\bDATEDIFF\s*\(\s*Minute\s*,', "DATEDIFF('Minute',", q_clean, flags=re.IGNORECASE)
         q_clean = q_clean.strip()
 
         if not q_clean or q_clean.startswith('--'):
             conn.close()
             return None, None
 
-        # Auto-create user on first login query
+        # 3. Auto-register user on first login
         m_user = re.search(r"UserId\s*=\s*'([^']+)'", q_clean, re.IGNORECASE)
         if m_user:
             uid = m_user.group(1)
-            cur.execute("INSERT OR IGNORE INTO UserList (UserId, UserPasswd, UserType) VALUES (?, '1234', 1)", (uid,))
+            cur.execute("INSERT OR IGNORE INTO UserList (UserId) VALUES (?)", (uid,))
+            cur.execute("INSERT OR IGNORE INTO UserList_Private (UserId, Password) VALUES (?, '1234')", (uid,))
             conn.commit()
 
         is_select = q_clean.upper().lstrip().startswith('SELECT')
@@ -195,7 +223,6 @@ def handle_tds_client(client_sock, addr):
             if not pkt or len(pkt) < 4:
                 break
 
-            # Filter out HTTP scanner probes (Render port detector)
             if pkt.startswith(b'GET') or pkt.startswith(b'HEAD') or pkt.startswith(b'POST') or pkt.startswith(b'PRI'):
                 client_sock.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK")
                 break
@@ -260,7 +287,7 @@ def start_sql_bridge(host="0.0.0.0", port=1433):
     try:
         s.bind((host, port))
         s.listen(50)
-        log_msg(f"Universal TDS server listening on port {port}...")
+        log_msg(f"Full MS SQL TDS server listening on port {port}...")
         while True:
             conn, addr = s.accept()
             threading.Thread(target=handle_tds_client, args=(conn, addr), daemon=True).start()
