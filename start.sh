@@ -5,19 +5,27 @@ echo "   NeoSteam 24/7 Global Server - Authentic Cloud Engine   "
 echo "=========================================================="
 
 mkdir -p /home/user/app/config
+
+# Fix: create per-user runtime dir for wineserver socket
+UID_VAL=$(id -u)
+export XDG_RUNTIME_DIR=/tmp/runtime-${UID_VAL}
+mkdir -p ${XDG_RUNTIME_DIR}
+chmod 700 ${XDG_RUNTIME_DIR}
+
 export WINEPREFIX=/home/user/.wine
 export WINEDEBUG=-all
 export WINEDLLOVERRIDES="mscoree,mshtml="
 export DISPLAY=:99
-export XDG_RUNTIME_DIR=/tmp
 
-# 1. Start Xvfb Virtual Framebuffer
-echo "[+] Starting Xvfb Virtual Framebuffer Display :99..."
-Xvfb :99 -screen 0 1024x768x16 -nolisten tcp &
+# 1. Start Xvfb (as user, without X11 socket, just framebuffer)
+echo "[+] Starting Xvfb Virtual Framebuffer..."
+Xvfb :99 -screen 0 1024x768x16 -nolisten unix -nolisten tcp &
 sleep 1
 
-# 2. Initialize Wine prefix
-wineboot --init || true
+# 2. Initialize Wine prefix once (sequential, not parallel)
+echo "[+] Initializing Wine prefix..."
+wineboot --init 2>/dev/null || true
+sleep 3
 
 # 3. Start Zero-SQL TDS Database Bridge on Port 1433
 echo "[+] Starting Zero-SQL TDS Database Bridge on Port 1433..."
@@ -45,12 +53,12 @@ fi
 # Wait 2 seconds for Bore ports to allocate
 sleep 2
 
-# 6. Dynamically configure NSLoginServer.ini with assigned game port
+# 6. Dynamically configure NSLoginServer.ini with assigned bore game port
 GAME_PORT=$(grep -oE 'bore\.pub:[0-9]+' /home/user/app/bore_game.log | awk -F: '{print $2}' | head -n 1)
 if [ -z "$GAME_PORT" ]; then
     GAME_PORT=7001
 fi
-echo "[+] Dynamically configuring cloud LoginServer redirect to Game Port: $GAME_PORT"
+echo "[+] Configuring Game Port: $GAME_PORT"
 
 LOGIN_INI="/home/user/app/MicroServer/LoginServer/NSLoginServer.ini"
 if [ -f "$LOGIN_INI" ]; then
@@ -58,15 +66,18 @@ if [ -f "$LOGIN_INI" ]; then
     sed -i "s/GameServerPort1 = .*/GameServerPort1 = $GAME_PORT/g" "$LOGIN_INI" || true
 fi
 
-# 7. Start Authentic NeoSteam Server Under Wine
-echo "[+] Starting Authentic NeoSteam Server Under Wine..."
+# 7. Start Login Server under Wine (sequential)
+echo "[+] Starting Login Server Under Wine..."
 cd /home/user/app/MicroServer/LoginServer
 if [ -f "NSLoginService.exe" ]; then
     wine NSLoginService.exe > /home/user/app/login.log 2>&1 &
 elif [ -f "NSLoginServer.exe" ]; then
     wine NSLoginServer.exe > /home/user/app/login.log 2>&1 &
 fi
+sleep 3
 
+# 8. Start World/Game Server under Wine
+echo "[+] Starting World Server Under Wine..."
 cd /home/user/app/MicroServer/8001
 if [ -f "NSWorldService.exe" ]; then
     wine NSWorldService.exe > /home/user/app/game.log 2>&1 &
