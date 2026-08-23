@@ -6,24 +6,18 @@ echo "=========================================================="
 
 mkdir -p /home/user/app/config
 
-# Per-user runtime directory
-UID_VAL=$(id -u)
-export XDG_RUNTIME_DIR=/tmp/runtime-${UID_VAL}
-mkdir -p ${XDG_RUNTIME_DIR}
-chmod 700 ${XDG_RUNTIME_DIR}
-
 export WINEPREFIX=/home/user/.wine
 export WINEDEBUG=-all
 export WINEDLLOVERRIDES="mscoree,mshtml="
 export DISPLAY=:99
 
-# 1. Start Web Dashboard FIRST
-echo "[+] Starting Web Dashboard on Port $PORT..."
+# 1. Start Multi-Threaded Web Dashboard on Port $PORT
+echo "[+] Starting Multi-Threaded Web Dashboard on Port $PORT..."
 python3 /home/user/app/server_web_dashboard.py &
 sleep 1
 
-# 2. Start Zero-SQL Database Bridge on Port 1433
-echo "[+] Starting Zero-SQL Database Bridge on Port 1433..."
+# 2. Start Zero-SQL TDS Database Bridge on Port 1433
+echo "[+] Starting Zero-SQL TDS Database Bridge on Port 1433..."
 python3 /home/user/app/sql_bridge.py &
 sleep 1
 
@@ -34,7 +28,7 @@ pkill -9 -f Xvfb 2>/dev/null || true
 Xvfb :99 -screen 0 1024x768x16 -ac -nolisten unix -nolisten tcp &
 sleep 1
 
-# 4. Start Bore TCP tunnels for Login (3001) & World (7001)
+# 4. Setup and start Bore TCP tunnels for Login (3001) & World (7001)
 if [ ! -f "/home/user/app/bore" ]; then
     echo "[+] Fetching Bore binary..."
     curl -SsL "https://github.com/ekzhang/bore/releases/download/v0.5.2/bore-v0.5.2-x86_64-unknown-linux-musl.tar.gz" -o /home/user/app/bore.tar.gz || true
@@ -65,7 +59,7 @@ elif [ -f "NSLoginServer.exe" ]; then
 fi
 sleep 2
 
-# 7. Start All 4 Zone Servers under Wine
+# 7. Start Zone 8001 (Starter Hub & World Router)
 echo "[+] Starting Zone 8001 (Starter Hub)..."
 cd /home/user/app/MicroServer/8001
 if [ -f "NSWorldService.exe" ]; then

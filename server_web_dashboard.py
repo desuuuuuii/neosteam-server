@@ -39,7 +39,7 @@ def read_log(path):
     except Exception as e:
         return str(e)
 
-class Handler(http.server.SimpleHTTPRequestHandler):
+class ThreadingHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         login_port, game_port = parse_live_ports()
         
@@ -100,6 +100,9 @@ pre {{ background:#090d13; padding:12px; border-radius:6px; text-align:left; fon
 
     def log_message(self, format, *args): pass
 
-print(f'[HTTP] Dashboard listening on port {PORT}...')
-with socketserver.TCPServer(('0.0.0.0', PORT), Handler) as httpd:
-    httpd.serve_forever()
+class ThreadedHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
+    daemon_threads = True
+
+print(f'[HTTP] Multi-threaded dashboard listening on port {PORT}...')
+server = ThreadedHTTPServer(('0.0.0.0', PORT), ThreadingHandler)
+server.serve_forever()
