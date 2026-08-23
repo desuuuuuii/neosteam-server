@@ -31,17 +31,11 @@ def parse_live_ports():
         
     return login_port, game_port
 
-def get_process_list():
+def read_log(path):
+    if not os.path.exists(path): return "No log file found."
     try:
-        res = subprocess.run(["ps", "-ef"], capture_output=True, text=True, timeout=2)
-        return res.stdout
-    except Exception as e:
-        return str(e)
-
-def get_listening_ports():
-    try:
-        res = subprocess.run(["netstat", "-tlpn"], capture_output=True, text=True, timeout=2)
-        return res.stdout
+        with open(path, "r", encoding="utf-8", errors="ignore") as f:
+            return f.read()[-2000:]
     except Exception as e:
         return str(e)
 
@@ -57,8 +51,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 "domain": "bore.pub",
                 "login_port": login_port,
                 "game_port": game_port,
-                "processes": get_process_list(),
-                "listening": get_listening_ports()
+                "login_log": read_log("/home/user/app/login.log"),
+                "game_log": read_log("/home/user/app/game.log")
             }
             body = json.dumps(data, indent=2).encode('utf-8')
             self.send_response(200)
@@ -92,7 +86,7 @@ pre {{ background:#090d13; padding:12px; border-radius:6px; text-align:left; fon
     <h1>NeoSteam Global Server</h1>
     <p>Render Cloud Engine Active ($0 / month)</p>
     <div class="box">{status_text}</div>
-    <pre>{get_listening_ports()}\n\n{get_process_list()}</pre>
+    <pre>Login Log:\n{read_log("/home/user/app/login.log")}\n\nGame Log:\n{read_log("/home/user/app/game.log")}</pre>
 </div>
 </body>
 </html>'''

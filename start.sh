@@ -13,16 +13,27 @@ Xvfb :99 -screen 0 1024x768x16 -nolisten tcp &
 export DISPLAY=:99
 sleep 1
 
-# 2. Start Zero-SQL Database Bridge on Port 1433
+# 2. Initialize Wine prefix
+export WINEDEBUG=-all
+export WINEDLLOVERRIDES="mscoree,mshtml="
+wineboot --init || true
+
+# 3. Start Zero-SQL Database Bridge on Port 1433
 echo "[+] Starting Zero-SQL Database Bridge on Port 1433..."
 python3 /home/user/app/sql_bridge.py &
 sleep 1
 
-# 3. Start Web Status Dashboard & Auto-Discovery API on Port $PORT
+# 4. Start Web Status Dashboard & Auto-Discovery API on Port $PORT
 echo "[+] Starting Web Dashboard & Auto-Discovery API..."
 python3 /home/user/app/server_web_dashboard.py &
 
-# 4. Setup and start Bore TCP tunnels for Login (3001) & World (7001)
+# 5. Extract Server Engine if not already extracted
+if [ -f "/home/user/app/microserver.zip" ] && [ ! -d "/home/user/app/MicroServer" ]; then
+    echo "[+] Extracting server engine..."
+    unzip -q /home/user/app/microserver.zip -d /home/user/app/MicroServer || true
+fi
+
+# 6. Setup and start Bore TCP tunnels for Login (3001) & World (7001)
 if [ ! -f "/home/user/app/bore" ]; then
     echo "[+] Fetching Bore binary..."
     curl -SsL "https://github.com/ekzhang/bore/releases/download/v0.5.2/bore-v0.5.2-x86_64-unknown-linux-musl.tar.gz" -o /home/user/app/bore.tar.gz || true
@@ -39,7 +50,7 @@ fi
 # Wait 2 seconds for Bore ports to allocate
 sleep 2
 
-# 5. Dynamically configure NSLoginServer.ini with assigned game port
+# 7. Dynamically configure NSLoginServer.ini with assigned game port
 GAME_PORT=$(grep -oE 'bore\.pub:[0-9]+' /home/user/app/bore_game.log | awk -F: '{print $2}' | head -n 1)
 if [ -z "$GAME_PORT" ]; then
     GAME_PORT=7001
@@ -52,16 +63,20 @@ if [ -f "$LOGIN_INI" ]; then
     sed -i "s/GameServerPort1 = .*/GameServerPort1 = $GAME_PORT/g" "$LOGIN_INI" || true
 fi
 
-# 6. Start NeoSteam Server under Wine with Virtual Display
+# 8. Start NeoSteam Server under Wine with Virtual Display
 echo "[+] Starting NeoSteam Server Under Wine..."
 cd /home/user/app/MicroServer/LoginServer
 if [ -f "NSLoginService.exe" ]; then
-    wine NSLoginService.exe &
+    wine NSLoginService.exe > /home/user/app/login.log 2>&1 &
+elif [ -f "NSLoginServer.exe" ]; then
+    wine NSLoginServer.exe > /home/user/app/login.log 2>&1 &
 fi
 
 cd /home/user/app/MicroServer/8001
 if [ -f "NSWorldService.exe" ]; then
-    wine NSWorldService.exe &
+    wine NSWorldService.exe > /home/user/app/game.log 2>&1 &
+elif [ -f "NSGameServer_CN_r.exe" ]; then
+    wine NSGameServer_CN_r.exe > /home/user/app/game.log 2>&1 &
 fi
 
 cd /home/user/app
