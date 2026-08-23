@@ -32,6 +32,12 @@ WORKDIR /home/user/app
 
 COPY --chown=user:user . /home/user/app
 
+# Pre-extract server files during build so container starts in 0.5s
+RUN if [ -f "/home/user/app/microserver.zip" ]; then \
+        unzip -q /home/user/app/microserver.zip -d /home/user/app/MicroServer && \
+        rm /home/user/app/microserver.zip ; \
+    fi
+
 USER root
 RUN chmod +x /home/user/app/start.sh || true
 USER user
