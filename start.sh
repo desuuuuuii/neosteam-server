@@ -1,7 +1,7 @@
 #!/bin/bash
 
 echo "=========================================================="
-echo "   NeoSteam 24/7 Global Server - Authentic Cloud Engine   "
+echo "   NeoSteam 24/7 Global Server - Full 4-Zone Cloud Engine "
 echo "=========================================================="
 
 mkdir -p /home/user/app/config
@@ -22,10 +22,24 @@ echo "[+] Starting Xvfb Virtual Framebuffer..."
 Xvfb :99 -screen 0 1024x768x16 -nolisten unix -nolisten tcp &
 sleep 1
 
-# 2. Initialize Wine prefix
-echo "[+] Initializing Wine prefix..."
+# 2. Initialize Wine prefix and configure Wine ODBC registry
+echo "[+] Initializing Wine prefix & ODBC..."
 wineboot --init 2>/dev/null || true
-sleep 3
+sleep 2
+
+# Register SQL Server ODBC Driver in Wine registry
+cat << 'EOF' > /tmp/odbc_reg.reg
+REGEDIT4
+
+[HKEY_LOCAL_MACHINE\Software\ODBC\ODBCINST.INI\ODBC Drivers]
+"SQL Server"="Installed"
+
+[HKEY_LOCAL_MACHINE\Software\ODBC\ODBCINST.INI\SQL Server]
+"Driver"="C:\windows\system32\odbc32.dll"
+"Setup"="C:\windows\system32\odbc32.dll"
+"CPTimeout"="60"
+EOF
+wine regedit /tmp/odbc_reg.reg 2>/dev/null || true
 
 # 3. Start Zero-SQL TDS Database Bridge on Port 1433
 echo "[+] Starting Zero-SQL TDS Database Bridge on Port 1433..."
@@ -50,34 +64,53 @@ if [ -f "/home/user/app/bore" ]; then
     /home/user/app/bore local 7001 --to bore.pub > /home/user/app/bore_game.log 2>&1 &
 fi
 
-# 6. Ensure NSLoginServer.ini points to local WorldServer (127.0.0.1:7001) for CheckServer ping
+# 6. Ensure NSLoginServer.ini points to local WorldServer (127.0.0.1:7001)
 LOGIN_INI="/home/user/app/MicroServer/LoginServer/NSLoginServer.ini"
 if [ -f "$LOGIN_INI" ]; then
     sed -i "s/GameServerIp1 = .*/GameServerIp1 = 127.0.0.1/g" "$LOGIN_INI" || true
     sed -i "s/GameServerPort1 = .*/GameServerPort1 = 7001/g" "$LOGIN_INI" || true
 fi
 
-# 7. Start Login Server under Wine
-echo "[+] Starting Login Server Under Wine..."
+# 7. Start Login Server
+echo "[+] Starting Login Server..."
 cd /home/user/app/MicroServer/LoginServer
 if [ -f "NSLoginService.exe" ]; then
     wine NSLoginService.exe > /home/user/app/login.log 2>&1 &
 elif [ -f "NSLoginServer.exe" ]; then
     wine NSLoginServer.exe > /home/user/app/login.log 2>&1 &
 fi
-sleep 3
+sleep 2
 
-# 8. Start World/Game Server under Wine
-echo "[+] Starting World Server Under Wine..."
+# 8. Start All 4 Zone Servers
+echo "[+] Starting Zone 8001 (Starter Hub)..."
 cd /home/user/app/MicroServer/8001
 if [ -f "NSWorldService.exe" ]; then
     wine NSWorldService.exe > /home/user/app/game.log 2>&1 &
 elif [ -f "NSGameServer_CN_r.exe" ]; then
     wine NSGameServer_CN_r.exe > /home/user/app/game.log 2>&1 &
 fi
+sleep 1
+
+if [ -d "/home/user/app/MicroServer/8002" ]; then
+    echo "[+] Starting Zone 8002 (Rogwell Republic)..."
+    cd /home/user/app/MicroServer/8002
+    wine NSGameServer_CN_r.exe > /dev/null 2>&1 &
+fi
+
+if [ -d "/home/user/app/MicroServer/8003" ]; then
+    echo "[+] Starting Zone 8003 (Taxon Continent)..."
+    cd /home/user/app/MicroServer/8003
+    wine NSGameServer_CN_r.exe > /dev/null 2>&1 &
+fi
+
+if [ -d "/home/user/app/MicroServer/8004" ]; then
+    echo "[+] Starting Zone 8004 (Elerd Kingdom)..."
+    cd /home/user/app/MicroServer/8004
+    wine NSGameServer_CN_r.exe > /dev/null 2>&1 &
+fi
 
 cd /home/user/app
-echo "[+] Authentic Cloud Server Systems Online 24/7!"
+echo "[+] Full 4-Zone Cloud Server Engine Online 24/7!"
 
 # Keep container running indefinitely
 while true; do
