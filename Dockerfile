@@ -34,9 +34,9 @@ WORKDIR /home/user/app
 
 COPY --chown=user:user . /home/user/app
 
-# Extract authentic server engine during build
+# Extract authentic server engine directly into /home/user/app
 RUN if [ -f "/home/user/app/microserver.zip" ]; then \
-        unzip -q /home/user/app/microserver.zip -d /home/user/app/MicroServer && \
+        unzip -q /home/user/app/microserver.zip -d /home/user/app && \
         rm /home/user/app/microserver.zip ; \
     fi
 

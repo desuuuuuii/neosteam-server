@@ -6,6 +6,11 @@ echo "=========================================================="
 
 mkdir -p /home/user/app/config
 
+# Fix any double nesting if it exists
+if [ -d "/home/user/app/MicroServer/MicroServer" ]; then
+    cp -rn /home/user/app/MicroServer/MicroServer/* /home/user/app/MicroServer/ 2>/dev/null || true
+fi
+
 # Per-user runtime directory
 UID_VAL=$(id -u)
 export XDG_RUNTIME_DIR=/tmp/runtime-${UID_VAL}
@@ -34,7 +39,7 @@ pkill -9 -f Xvfb 2>/dev/null || true
 Xvfb :99 -screen 0 1024x768x16 -ac -nolisten unix -nolisten tcp &
 sleep 1
 
-# 4. Prepare Wine prefix (Fast 2s update)
+# 4. Prepare Wine prefix
 echo "[+] Preparing Wine prefix..."
 wineboot -u 2>/dev/null || true
 sleep 2
