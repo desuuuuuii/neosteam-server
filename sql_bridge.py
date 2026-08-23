@@ -1,9 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-Universal Zero-SQL TDS Bridge for NeoSteam Server
-Supports TDS 4.2, 7.0, 7.1, 7.2 (Wine ODBC, FreeTDS, unixODBC, native Winsock)
-"""
-
 import socket
 import struct
 import threading
@@ -24,7 +19,7 @@ def log_msg(msg):
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-    cur.executescript("""
+    cur.executescript('''
     CREATE TABLE IF NOT EXISTS UserList (
         Seq INTEGER PRIMARY KEY AUTOINCREMENT,
         UserId TEXT UNIQUE COLLATE NOCASE,
@@ -70,7 +65,7 @@ def init_db():
     INSERT OR IGNORE INTO UserList (UserId, UserPasswd, UserType) VALUES ('admin', '1234', 2);
     INSERT OR IGNORE INTO UserList (UserId, UserPasswd, UserType) VALUES ('test', '1234', 1);
     INSERT OR IGNORE INTO UserList (UserId, UserPasswd, UserType) VALUES ('zevan', '1234', 1);
-    """)
+    ''')
     conn.commit()
     conn.close()
     log_msg("SQLite Database Initialized!")
@@ -78,8 +73,7 @@ def init_db():
 def execute_sql(query_text):
     try:
         q = query_text.strip()
-        if not q:
-            return None, None
+        if not q: return None, None
 
         log_msg(f"SQL QUERY: {q}")
 
@@ -87,7 +81,6 @@ def execute_sql(query_text):
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
 
-        # Map common MS SQL patterns to SQLite
         q_clean = re.sub(r'WITH\s*\(NOLOCK\)', '', q, flags=re.IGNORECASE)
         q_clean = re.sub(r'TOP\s+\d+', '', q_clean, flags=re.IGNORECASE)
         q_clean = re.sub(r'NOCOUNT\s+ON', '', q_clean, flags=re.IGNORECASE)
@@ -104,27 +97,19 @@ def execute_sql(query_text):
             conn.close()
             return None, None
 
-        # Check if user query
+        # Auto-create user on first login query
         m_user = re.search(r"UserId\s*=\s*'([^']+)'", q_clean, re.IGNORECASE)
         if m_user:
-            # Ensure user exists in table
             uid = m_user.group(1)
             cur.execute("INSERT OR IGNORE INTO UserList (UserId, UserPasswd, UserType) VALUES (?, '1234', 1)", (uid,))
             conn.commit()
 
         is_select = q_clean.upper().lstrip().startswith('SELECT')
-
         cur.execute(q_clean)
 
         if is_select:
             rows = cur.fetchall()
-            if rows:
-                cols = [desc[0] for desc in cur.description]
-            elif cur.description:
-                cols = [desc[0] for desc in cur.description]
-                rows = []
-            else:
-                cols, rows = None, None
+            cols = [desc[0] for desc in cur.description] if cur.description else None
         else:
             conn.commit()
             cols, rows = None, None
@@ -176,10 +161,7 @@ def build_empty_done():
     return tds_packet(tds_done(0))
 
 def extract_queries(raw_bytes):
-    if len(raw_bytes) < 8:
-        return []
-    pkt_type = raw_bytes[0]
-    # Packet types: 0x01 (SQL Batch), 0x03 (RPC), 0x0E (Transaction Manager)
+    if len(raw_bytes) < 8: return []
     sql_bytes = raw_bytes[8:]
     queries = []
     
@@ -202,26 +184,26 @@ def extract_queries(raw_bytes):
                     queries.append(part)
     except: pass
 
-    if not queries:
-        try:
-            raw_str = sql_bytes.decode('utf-16le', errors='ignore').strip()
-            if raw_str: queries.append(raw_str)
-        except: pass
-        
     return queries
 
 def handle_tds_client(client_sock, addr):
     try:
         client_sock.settimeout(60)
-        log_msg(f"New Database Connection from {addr}")
 
         while True:
             pkt = client_sock.recv(8192)
-            if not pkt or len(pkt) < 8:
+            if not pkt or len(pkt) < 4:
                 break
 
+            # Filter out HTTP scanner probes (Render port detector)
+            if pkt.startswith(b'GET') or pkt.startswith(b'HEAD') or pkt.startswith(b'POST') or pkt.startswith(b'PRI'):
+                client_sock.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK")
+                break
+
+            if len(pkt) < 8:
+                continue
+
             pkt_type = pkt[0]
-            log_msg(f"TDS Packet Received: Type=0x{pkt_type:02x}, Length={len(pkt)}")
 
             if pkt_type == 0x12:  # Pre-Login Handshake
                 prelogin_payload = (
@@ -238,7 +220,6 @@ def handle_tds_client(client_sock, addr):
                 client_sock.sendall(tds_packet(prelogin_payload))
 
             elif pkt_type in [0x01, 0x02, 0x10]:  # Login / Login7 / Pre-TDS Login
-                # Send LoginACK + DONE
                 login_ack = (
                     b'\xad'
                     b'\x36\x00'
@@ -249,12 +230,9 @@ def handle_tds_client(client_sock, addr):
                     + b'\x09\x00\x08\x00'
                 )
                 client_sock.sendall(tds_packet(login_ack + tds_done()))
-                log_msg("Sent LOGINACK Success to client!")
 
             else:
-                # Query / Command packet
                 queries = extract_queries(pkt)
-                log_msg(f"Extracted queries ({len(queries)}): {queries}")
                 response = None
 
                 for q in queries:
