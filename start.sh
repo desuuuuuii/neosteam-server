@@ -1,7 +1,7 @@
 #!/bin/bash
 
 echo "=========================================================="
-echo "   NeoSteam 24/7 Global Server - Cloud World Engine       "
+echo "   NeoSteam 24/7 Global Server - Authentic Standalone Svr "
 echo "=========================================================="
 
 mkdir -p /home/user/app/config
@@ -55,27 +55,27 @@ if [ -f "$LOGIN_INI" ]; then
     sed -i "s/GameServerPort1 = .*/GameServerPort1 = 7001/g" "$LOGIN_INI" || true
 fi
 
-# 6. Start Login Server under Wine
-echo "[+] Starting Login Server..."
+# 6. Start Authentic Standalone NSLoginServer.exe
+echo "[+] Starting NSLoginServer.exe..."
 cd /home/user/app/MicroServer/LoginServer
-if [ -f "NSLoginService.exe" ]; then
-    wine NSLoginService.exe > /home/user/app/login.log 2>&1 &
-elif [ -f "NSLoginServer.exe" ]; then
+if [ -f "NSLoginServer.exe" ]; then
     wine NSLoginServer.exe > /home/user/app/login.log 2>&1 &
+elif [ -f "NSLoginService.exe" ]; then
+    wine NSLoginService.exe > /home/user/app/login.log 2>&1 &
 fi
 sleep 3
 
-# 7. Start Zone 8001 (Starter Hub - 180MB RAM Total)
-echo "[+] Starting Zone 8001 (Starter Hub)..."
+# 7. Start Authentic Standalone NSGameServer_CN_r.exe (Zone 8001 Starter Hub)
+echo "[+] Starting NSGameServer_CN_r.exe (Zone 8001)..."
 cd /home/user/app/MicroServer/8001
-if [ -f "NSWorldService.exe" ]; then
-    wine NSWorldService.exe > /home/user/app/game.log 2>&1 &
-elif [ -f "NSGameServer_CN_r.exe" ]; then
+if [ -f "NSGameServer_CN_r.exe" ]; then
     wine NSGameServer_CN_r.exe > /home/user/app/game.log 2>&1 &
+elif [ -f "NSWorldService.exe" ]; then
+    wine NSWorldService.exe > /home/user/app/game.log 2>&1 &
 fi
 
 cd /home/user/app
-echo "[+] NeoSteam Cloud Server Engine Online 24/7 (RAM: ~180MB / 512MB)!"
+echo "[+] Authentic Standalone NeoSteam Server Online 24/7!"
 
 # Keep container running indefinitely
 while true; do
