@@ -15,7 +15,7 @@ if [ -f "/home/user/app/microserver.zip" ] && [ ! -d "/home/user/app/MicroServer
 fi
 
 # 3. Download official Playit Linux AMD64 Binary
-if [ ! -f "/home/user/app/playit" ] || ! file /home/user/app/playit | grep -q "ELF"; then
+if [ ! -f "/home/user/app/playit" ]; then
     echo "[+] Fetching official Playit binary..."
     curl -SsL "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-linux-amd64" -o /home/user/app/playit || true
     chmod +x /home/user/app/playit || true
@@ -23,7 +23,7 @@ fi
 
 if [ -f "/home/user/app/playit" ]; then
     echo "[+] Starting Playit Global Network Router..."
-    /home/user/app/playit run &
+    /home/user/app/playit run > /home/user/app/playit.log 2>&1 &
 fi
 
 # 4. Start NeoSteam Server under Wine

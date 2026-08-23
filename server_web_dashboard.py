@@ -2,37 +2,68 @@
 import http.server
 import socketserver
 import os
+import re
 
 PORT = int(os.environ.get('PORT', 10000))
 
-HTML = """<!DOCTYPE html>
+def get_playit_info():
+    log_path = "/home/user/app/playit.log"
+    if not os.path.exists(log_path):
+        return "Starting Playit network router..."
+    try:
+        with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
+            content = f.read()
+        
+        # Search for claim URL or assigned domain
+        claim_match = re.search(r'(https://playit\.gg/claim/[a-zA-Z0-9]+)', content)
+        if claim_match:
+            return f'<a href="{claim_match.group(1)}" target="_blank" style="color:#58a6ff; font-weight:bold; font-size:18px;">👉 Click here to claim your 24/7 Game Domain: {claim_match.group(1)}</a>'
+        
+        domain_match = re.search(r'([a-zA-Z0-9\-]+\.(?:gl|ply|at)\.ply\.gg:\d+)', content)
+        if domain_match:
+            return f'<span style="color:#3fb950; font-size:20px; font-weight:bold;">🎮 Game Address: {domain_match.group(1)}</span>'
+        
+        return "Playit is initializing... Refresh in 5 seconds."
+    except Exception as e:
+        return f"Status: {e}"
+
+class Handler(http.server.SimpleHTTPRequestHandler):
+    def do_GET(self):
+        playit_status = get_playit_info()
+        html = f'''<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
+<meta http-equiv="refresh" content="10">
 <title>NeoSteam Global MMO Server</title>
 <style>
-body { background:#0d1117; color:#c9d1d9; font-family:sans-serif; display:flex; justify-content:center; align-items:center; height:100vh; margin:0; }
-.card { background:#161b22; border:1px solid #30363d; border-radius:12px; padding:32px; text-align:center; max-width:500px; }
-h1 { color:#58a6ff; margin-bottom:8px; }
-.badge { background:rgba(46,160,67,0.2); color:#3fb950; border:1px solid #2ea043; padding:6px 14px; border-radius:20px; font-weight:bold; }
+body {{ background:#0d1117; color:#c9d1d9; font-family:system-ui, sans-serif; display:flex; justify-content:center; align-items:center; min-height:100vh; margin:0; padding:20px; }}
+.card {{ background:#161b22; border:1px solid #30363d; border-radius:12px; padding:32px; text-align:center; max-width:600px; width:100%; box-shadow:0 8px 24px rgba(0,0,0,0.5); }}
+h1 {{ color:#58a6ff; margin-bottom:8px; }}
+.badge {{ background:rgba(46,160,67,0.2); color:#3fb950; border:1px solid #2ea043; padding:6px 14px; border-radius:20px; font-weight:bold; display:inline-block; margin-bottom:20px; }}
+.info-box {{ background:#21262d; border:1px solid #30363d; border-radius:8px; padding:16px; margin:20px 0; word-break:break-all; }}
 </style>
 </head>
 <body>
 <div class="card">
-    <div class="badge">SERVER ONLINE 24/7</div>
+    <div class="badge">● SERVER ONLINE 24/7</div>
     <h1>NeoSteam Global Server</h1>
-    <p>Render Cloud Engine Active</p>
+    <p>Cloud Engine Active on Render ($0 / month)</p>
+    
+    <div class="info-box">
+        {playit_status}
+    </div>
+    
+    <p style="font-size:13px; color:#8b949e;">Login & World Services are active. Page refreshes automatically.</p>
 </div>
 </body>
-</html>"""
-
-class Handler(http.server.SimpleHTTPRequestHandler):
-    def do_GET(self):
+</html>'''
         self.send_response(200)
         self.send_header('Content-Type', 'text/html; charset=utf-8')
-        self.send_header('Content-Length', str(len(HTML.encode('utf-8'))))
+        self.send_header('Content-Length', str(len(html.encode('utf-8'))))
         self.end_headers()
-        self.wfile.write(HTML.encode('utf-8'))
+        self.wfile.write(html.encode('utf-8'))
+
     def log_message(self, format, *args): pass
 
 print(f'[HTTP] Dashboard listening on port {PORT}...')
