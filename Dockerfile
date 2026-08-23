@@ -24,10 +24,14 @@ RUN dpkg --add-architecture i386 && \
         ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
+# Fix /tmp permissions for non-root Wine & Xvfb sockets
+RUN mkdir -p /tmp/.X11-unix && chmod 1777 /tmp /tmp/.X11-unix
+
 RUN useradd -m -u 1000 user
 USER user
 ENV HOME=/home/user \
-    PATH=/home/user/.local/bin:$PATH
+    PATH=/home/user/.local/bin:$PATH \
+    XDG_RUNTIME_DIR=/tmp
 
 WORKDIR /home/user/app
 
