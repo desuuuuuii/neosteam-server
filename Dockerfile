@@ -1,23 +1,15 @@
 FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
-ENV WINEDEBUG=-all
-ENV DISPLAY=:99
 
-RUN dpkg --add-architecture i386 && \
-    apt-get update && \
+RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        wine32 \
-        wine64 \
-        xvfb \
-        xauth \
         python3 \
         python3-pip \
         python3-psutil \
         curl \
         wget \
-        unzip \
-        file \
+        tar \
         net-tools \
         procps \
         ca-certificates && \
@@ -31,12 +23,6 @@ ENV HOME=/home/user \
 WORKDIR /home/user/app
 
 COPY --chown=user:user . /home/user/app
-
-# Pre-extract server files during build so container starts in 0.5s
-RUN if [ -f "/home/user/app/microserver.zip" ]; then \
-        unzip -q /home/user/app/microserver.zip -d /home/user/app/MicroServer && \
-        rm /home/user/app/microserver.zip ; \
-    fi
 
 USER root
 RUN chmod +x /home/user/app/start.sh || true
