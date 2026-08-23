@@ -56,7 +56,7 @@ def get_live_game_port():
         try:
             with open(bore_game, "r", encoding="utf-8", errors="ignore") as f:
                 import re
-                m = re.search(r'bore\\.pub:(\\d+)', f.read())
+                m = re.search(r'bore\.pub:(\d+)', f.read())
                 if m: return int(m.group(1))
         except: pass
     return 7001
@@ -73,13 +73,13 @@ def start_login_server(host="0.0.0.0", port=3001):
                 conn, addr = s.accept()
                 threading.Thread(target=handle_login_client, args=(conn, addr), daemon=True).start()
         except Exception as e:
-            print(f"[Cloud Engine] Login Server bind error (Wine running?): {e}")
+            print(f"[Cloud Engine] Login Server bind error: {e}")
 
     def handle_login_client(conn, addr):
         conn.settimeout(60)
         try:
-            # 1. Send Login Handshake
-            handshake = struct.pack('<H', 36) + struct.pack('<H', 0x0002) + (b'\\x00' * 32)
+            # 1. Send Login Handshake (36 bytes exact: Length=36 uint16, Opcode=0x0002 uint16, 32 null bytes)
+            handshake = struct.pack('<HH32s', 36, 0x0002, b'\x00' * 32)
             conn.sendall(handshake)
 
             packet_count = 0
@@ -92,17 +92,17 @@ def start_login_server(host="0.0.0.0", port=3001):
                     
                     if packet_count == 1:
                         # CS_LOGIN -> Respond with Server List
-                        ip_bytes = b"159.223.110.159".ljust(16, b'\\x00')
-                        name_bytes = b"NeoSteam Global".ljust(32, b'\\x00')
+                        ip_bytes = b"159.223.110.159".ljust(16, b'\x00')
+                        name_bytes = b"NeoSteam Global".ljust(32, b'\x00')
                         payload = name_bytes + ip_bytes + struct.pack('<H', game_port) + struct.pack('<H', 1)
-                        resp = struct.pack('<H', len(payload) + 4) + struct.pack('<H', 0x0004) + payload
+                        resp = struct.pack('<HH', len(payload) + 4, 0x0004) + payload
                         conn.sendall(resp)
                     else:
                         # CS_SELECT_SERVER -> Respond with Session Token and Game Server Port
-                        token = b'\\x01' * 32
-                        ip_bytes = b"159.223.110.159".ljust(16, b'\\x00')
+                        token = b'\x01' * 32
+                        ip_bytes = b"159.223.110.159".ljust(16, b'\x00')
                         payload = struct.pack('<H', game_port) + ip_bytes + token
-                        select_ack = struct.pack('<H', len(payload) + 4) + struct.pack('<H', 0x0006) + payload
+                        select_ack = struct.pack('<HH', len(payload) + 4, 0x0006) + payload
                         conn.sendall(select_ack)
         except:
             pass
@@ -124,20 +124,20 @@ def start_game_server(host="0.0.0.0", port=7001):
                 conn, addr = s.accept()
                 threading.Thread(target=handle_game_client, args=(conn, addr), daemon=True).start()
         except Exception as e:
-            print(f"[Cloud Engine] Game World bind error (Wine running?): {e}")
+            print(f"[Cloud Engine] Game World bind error: {e}")
 
     def handle_game_client(conn, addr):
         conn.settimeout(60)
         try:
-            # 1. Send Game World Handshake
-            handshake = struct.pack('<H', 36) + struct.pack('<H', 0x0002) + (b'\\x00' * 32)
+            # 1. Send Game World Handshake (36 bytes exact)
+            handshake = struct.pack('<HH32s', 36, 0x0002, b'\x00' * 32)
             conn.sendall(handshake)
 
             while True:
                 data = conn.recv(4096)
                 if not data: break
                 if len(data) >= 4:
-                    ack = struct.pack('<H', len(data)) + data[2:4] + (b'\\x00' * max(0, len(data) - 4))
+                    ack = struct.pack('<H', len(data)) + data[2:4] + (b'\x00' * max(0, len(data) - 4))
                     conn.sendall(ack)
         except:
             pass
