@@ -35,7 +35,7 @@ def read_log(path):
     if not os.path.exists(path): return "No log file found."
     try:
         with open(path, "r", encoding="utf-8", errors="ignore") as f:
-            return f.read()[-2000:]
+            return f.read()[-3000:]
     except Exception as e:
         return str(e)
 
@@ -52,7 +52,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 "login_port": login_port,
                 "game_port": game_port,
                 "login_log": read_log("/home/user/app/login.log"),
-                "game_log": read_log("/home/user/app/game.log")
+                "game_log": read_log("/home/user/app/game.log"),
+                "sql_log": read_log("/home/user/app/sql_bridge.log")
             }
             body = json.dumps(data, indent=2).encode('utf-8')
             self.send_response(200)
@@ -86,7 +87,7 @@ pre {{ background:#090d13; padding:12px; border-radius:6px; text-align:left; fon
     <h1>NeoSteam Global Server</h1>
     <p>Render Cloud Engine Active ($0 / month)</p>
     <div class="box">{status_text}</div>
-    <pre>Login Log:\n{read_log("/home/user/app/login.log")}\n\nGame Log:\n{read_log("/home/user/app/game.log")}</pre>
+    <pre>Login Log:\n{read_log("/home/user/app/login.log")}\n\nGame Log:\n{read_log("/home/user/app/game.log")}\n\nSQL Log:\n{read_log("/home/user/app/sql_bridge.log")}</pre>
 </div>
 </body>
 </html>'''

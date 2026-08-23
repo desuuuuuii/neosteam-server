@@ -6,7 +6,7 @@ echo "=========================================================="
 
 mkdir -p /home/user/app/config
 
-# Fix: create per-user runtime dir for wineserver socket
+# Per-user runtime directory
 UID_VAL=$(id -u)
 export XDG_RUNTIME_DIR=/tmp/runtime-${UID_VAL}
 mkdir -p ${XDG_RUNTIME_DIR}
@@ -17,12 +17,12 @@ export WINEDEBUG=-all
 export WINEDLLOVERRIDES="mscoree,mshtml="
 export DISPLAY=:99
 
-# 1. Start Xvfb (as user, without X11 socket, just framebuffer)
+# 1. Start Xvfb
 echo "[+] Starting Xvfb Virtual Framebuffer..."
 Xvfb :99 -screen 0 1024x768x16 -nolisten unix -nolisten tcp &
 sleep 1
 
-# 2. Initialize Wine prefix once (sequential, not parallel)
+# 2. Initialize Wine prefix
 echo "[+] Initializing Wine prefix..."
 wineboot --init 2>/dev/null || true
 sleep 3
@@ -50,23 +50,14 @@ if [ -f "/home/user/app/bore" ]; then
     /home/user/app/bore local 7001 --to bore.pub > /home/user/app/bore_game.log 2>&1 &
 fi
 
-# Wait 2 seconds for Bore ports to allocate
-sleep 2
-
-# 6. Dynamically configure NSLoginServer.ini with assigned bore game port
-GAME_PORT=$(grep -oE 'bore\.pub:[0-9]+' /home/user/app/bore_game.log | awk -F: '{print $2}' | head -n 1)
-if [ -z "$GAME_PORT" ]; then
-    GAME_PORT=7001
-fi
-echo "[+] Configuring Game Port: $GAME_PORT"
-
+# 6. Ensure NSLoginServer.ini points to local WorldServer (127.0.0.1:7001) for CheckServer ping
 LOGIN_INI="/home/user/app/MicroServer/LoginServer/NSLoginServer.ini"
 if [ -f "$LOGIN_INI" ]; then
-    sed -i "s/GameServerIp1 = .*/GameServerIp1 = 159.223.110.159/g" "$LOGIN_INI" || true
-    sed -i "s/GameServerPort1 = .*/GameServerPort1 = $GAME_PORT/g" "$LOGIN_INI" || true
+    sed -i "s/GameServerIp1 = .*/GameServerIp1 = 127.0.0.1/g" "$LOGIN_INI" || true
+    sed -i "s/GameServerPort1 = .*/GameServerPort1 = 7001/g" "$LOGIN_INI" || true
 fi
 
-# 7. Start Login Server under Wine (sequential)
+# 7. Start Login Server under Wine
 echo "[+] Starting Login Server Under Wine..."
 cd /home/user/app/MicroServer/LoginServer
 if [ -f "NSLoginService.exe" ]; then

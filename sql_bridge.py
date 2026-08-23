@@ -13,6 +13,13 @@ import re
 import time
 
 DB_PATH = "/home/user/app/neosteam.sqlite" if os.name != 'nt' else r"D:\NeoSteam\neosteam.sqlite"
+LOG_PATH = "/home/user/app/sql_bridge.log" if os.name != 'nt' else r"D:\NeoSteam\sql_bridge.log"
+
+def log_msg(msg):
+    try:
+        with open(LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}\n")
+    except: pass
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
@@ -66,40 +73,41 @@ def init_db():
     """)
     conn.commit()
     conn.close()
-    print("[SQL Bridge] SQLite Database Initialized!")
+    log_msg("SQLite Database Initialized!")
 
 def execute_sql(query_text):
     """Execute SQL against SQLite and return (columns, rows) or (None, None) for no-result queries."""
     try:
-        # Normalize the query
         q = query_text.strip()
         if not q:
             return None, None
+
+        log_msg(f"SQL QUERY: {q}")
 
         conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
 
         # Map common MS SQL patterns to SQLite
-        q = re.sub(r'WITH\s*\(NOLOCK\)', '', q, flags=re.IGNORECASE)
-        q = re.sub(r'TOP\s+\d+', '', q, flags=re.IGNORECASE)
-        q = re.sub(r'NOCOUNT\s+ON', '', q, flags=re.IGNORECASE)
-        q = re.sub(r'SET\s+\w+\s+\w+', '', q, flags=re.IGNORECASE)
-        q = re.sub(r'\bGO\b', '', q, flags=re.IGNORECASE)
-        q = re.sub(r'\bdbo\.', '', q, flags=re.IGNORECASE)
-        q = re.sub(r'\bMain_DB_1\.', '', q, flags=re.IGNORECASE)
-        q = re.sub(r'\bGame_DB_1_1\.', '', q, flags=re.IGNORECASE)
-        q = re.sub(r'GETDATE\(\)', "datetime('now')", q, flags=re.IGNORECASE)
-        q = re.sub(r'@@IDENTITY', 'last_insert_rowid()', q, flags=re.IGNORECASE)
-        q = q.strip()
+        q_clean = re.sub(r'WITH\s*\(NOLOCK\)', '', q, flags=re.IGNORECASE)
+        q_clean = re.sub(r'TOP\s+\d+', '', q_clean, flags=re.IGNORECASE)
+        q_clean = re.sub(r'NOCOUNT\s+ON', '', q_clean, flags=re.IGNORECASE)
+        q_clean = re.sub(r'SET\s+\w+\s+\w+', '', q_clean, flags=re.IGNORECASE)
+        q_clean = re.sub(r'\bGO\b', '', q_clean, flags=re.IGNORECASE)
+        q_clean = re.sub(r'\bdbo\.', '', q_clean, flags=re.IGNORECASE)
+        q_clean = re.sub(r'\bMain_DB_1\.', '', q_clean, flags=re.IGNORECASE)
+        q_clean = re.sub(r'\bGame_DB_1_1\.', '', q_clean, flags=re.IGNORECASE)
+        q_clean = re.sub(r'GETDATE\(\)', "datetime('now')", q_clean, flags=re.IGNORECASE)
+        q_clean = re.sub(r'@@IDENTITY', 'last_insert_rowid()', q_clean, flags=re.IGNORECASE)
+        q_clean = q_clean.strip()
 
-        if not q or q.startswith('--'):
+        if not q_clean or q_clean.startswith('--'):
             conn.close()
             return None, None
 
-        is_select = q.upper().lstrip().startswith('SELECT')
+        is_select = q_clean.upper().lstrip().startswith('SELECT')
 
-        cur.execute(q)
+        cur.execute(q_clean)
 
         if is_select:
             rows = cur.fetchall()
@@ -115,41 +123,27 @@ def execute_sql(query_text):
             cols, rows = None, None
 
         conn.close()
+        log_msg(f"SQL SUCCESS: is_select={is_select}, rows={len(rows) if rows is not None else 0}")
         return cols, rows
 
     except Exception as e:
+        log_msg(f"SQL ERROR: {e} on query: {query_text}")
         return None, None
-
 
 # ---------- TDS ENCODING HELPERS ----------
 
-def tds_varchar(s):
-    """Encode a string as TDS NVARCHAR token value (utf-16le with 2-byte length prefix)."""
-    if s is None:
-        return b'\xff\xff'  # NULL
-    encoded = str(s).encode('utf-16le')
-    return struct.pack('<H', len(encoded)) + encoded
-
-def tds_int(v):
-    """Encode a 4-byte integer value."""
-    return struct.pack('<i', int(v) if v is not None else 0)
-
 def tds_col_meta(cols):
-    """Build a COLMETADATA token (0x81) for the given column names."""
-    # 0x81 = COLMETADATA
     col_count = len(cols)
     data = struct.pack('<BH', 0x81, col_count)
     for col in cols:
-        # UserType=0, Flags=0x0009 (nullable), TypeInfo=NVARCHARMAX, ColName
         col_name = col.encode('utf-16le')
-        data += struct.pack('<HHB', 0, 0x0009, 0xe7)  # NVARCHAR type
-        data += struct.pack('<H', 8000)  # max length
-        data += b'\x09\x04\xd0\x00\x34'  # LCID/collation
+        data += struct.pack('<HHB', 0, 0x0009, 0xe7)
+        data += struct.pack('<H', 8000)
+        data += b'\x09\x04\xd0\x00\x34'
         data += struct.pack('<B', len(col)) + col_name
     return data
 
 def tds_row(row_values):
-    """Build a ROW token (0xD1) for one result row."""
     data = b'\xd1'
     for v in row_values:
         if v is None:
@@ -160,30 +154,23 @@ def tds_row(row_values):
     return data
 
 def tds_done(rows_affected=0):
-    """Build a DONE token (0xFD)."""
     return struct.pack('<BHHQ', 0xfd, 0x00, 0x00, rows_affected)
 
 def tds_packet(payload, pkt_type=0x04):
-    """Wrap payload in TDS packet header."""
     hdr = struct.pack('>BBHHBB', pkt_type, 0x01, len(payload) + 8, 0, 1, 0)
     return hdr + payload
 
-
 def build_resultset(cols, rows):
-    """Build a full TDS resultset: COLMETADATA + ROWs + DONE."""
     payload = tds_col_meta(cols)
     for row in rows:
         payload += tds_row(list(row))
     payload += tds_done(len(rows))
     return tds_packet(payload)
 
-
 def build_empty_done():
     return tds_packet(tds_done(0))
 
-
 def extract_queries(raw_bytes):
-    """Extract SQL text from a TDS batch packet (type 0x01)."""
     if len(raw_bytes) < 8:
         return []
     pkt_type = raw_bytes[0]
@@ -199,7 +186,6 @@ def extract_queries(raw_bytes):
         return [text.strip()]
     return []
 
-
 def handle_tds_client(client_sock, addr):
     try:
         client_sock.settimeout(60)
@@ -209,7 +195,7 @@ def handle_tds_client(client_sock, addr):
         if not data or len(data) < 8:
             return
 
-        if data[0] == 0x12:  # Pre-Login
+        if data[0] == 0x12:
             prelogin_payload = (
                 b'\x00\x00\x1a\x00\x06'
                 b'\x01\x00\x20\x00\x01'
@@ -262,11 +248,10 @@ def handle_tds_client(client_sock, addr):
             client_sock.sendall(response)
 
     except Exception as e:
-        pass
+        log_msg(f"TDS Client Exception: {e}")
     finally:
         try: client_sock.close()
         except: pass
-
 
 def start_sql_bridge(host="0.0.0.0", port=1433):
     init_db()
@@ -275,12 +260,12 @@ def start_sql_bridge(host="0.0.0.0", port=1433):
     try:
         s.bind((host, port))
         s.listen(50)
-        print(f"[SQL Bridge] Full TDS server on port {port}...")
+        log_msg(f"Full TDS server listening on port {port}...")
         while True:
             conn, addr = s.accept()
             threading.Thread(target=handle_tds_client, args=(conn, addr), daemon=True).start()
     except Exception as e:
-        print(f"[SQL Bridge] Error: {e}")
+        log_msg(f"SQL Bridge Bind Error: {e}")
 
 if __name__ == '__main__':
     start_sql_bridge()
