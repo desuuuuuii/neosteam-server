@@ -4,7 +4,7 @@ import socketserver
 import os
 import re
 import json
-import urllib.request
+import subprocess
 
 PORT = int(os.environ.get('PORT', 10000))
 
@@ -31,18 +31,34 @@ def parse_live_ports():
         
     return login_port, game_port
 
+def get_process_list():
+    try:
+        res = subprocess.run(["ps", "-ef"], capture_output=True, text=True, timeout=2)
+        return res.stdout
+    except Exception as e:
+        return str(e)
+
+def get_listening_ports():
+    try:
+        res = subprocess.run(["netstat", "-tlpn"], capture_output=True, text=True, timeout=2)
+        return res.stdout
+    except Exception as e:
+        return str(e)
+
 class Handler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         login_port, game_port = parse_live_ports()
         
-        # 1. API Endpoint for nsstarter.exe Auto-Discovery
-        if self.path.startswith("/api/ports") or self.path.startswith("/ports"):
+        # 1. API Diagnostics Endpoint
+        if self.path.startswith("/api/ports") or self.path.startswith("/ports") or self.path.startswith("/api/debug"):
             data = {
                 "status": "online" if (login_port and game_port) else "initializing",
                 "host": "159.223.110.159",
                 "domain": "bore.pub",
                 "login_port": login_port,
-                "game_port": game_port
+                "game_port": game_port,
+                "processes": get_process_list(),
+                "listening": get_listening_ports()
             }
             body = json.dumps(data, indent=2).encode('utf-8')
             self.send_response(200)
@@ -54,7 +70,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return
 
         # 2. Web UI Dashboard
-        status_text = f"Login (3001): <strong>bore.pub:{login_port}</strong> | Game (7001): <strong>bore.pub:{game_port}</strong>" if (login_port and game_port) else "Initializing cloud ports... Refreshing in 5s..."
+        status_text = f"Login (3001): <strong>bore.pub:{login_port}</strong> | Game (7001): <strong>bore.pub:{game_port}</strong>"
         html = f'''<!DOCTYPE html>
 <html>
 <head>
@@ -62,11 +78,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 <meta http-equiv="refresh" content="5">
 <title>NeoSteam Global Server</title>
 <style>
-body {{ background:#0d1117; color:#c9d1d9; font-family:system-ui, sans-serif; display:flex; justify-content:center; align-items:center; min-height:100vh; margin:0; }}
-.card {{ background:#161b22; border:1px solid #30363d; border-radius:12px; padding:32px; text-align:center; max-width:600px; }}
+body {{ background:#0d1117; color:#c9d1d9; font-family:system-ui, sans-serif; display:flex; justify-content:center; align-items:center; min-height:100vh; margin:0; padding:20px; }}
+.card {{ background:#161b22; border:1px solid #30363d; border-radius:12px; padding:32px; text-align:center; max-width:700px; width:100%; }}
 h1 {{ color:#58a6ff; margin-bottom:8px; }}
 .badge {{ background:rgba(46,160,67,0.2); color:#3fb950; border:1px solid #2ea043; padding:6px 14px; border-radius:20px; font-weight:bold; display:inline-block; margin-bottom:20px; }}
 .box {{ background:#21262d; border:1px solid #30363d; border-radius:8px; padding:16px; margin:20px 0; font-size:16px; color:#f0f6fc; }}
+pre {{ background:#090d13; padding:12px; border-radius:6px; text-align:left; font-size:11px; overflow-x:auto; max-height:200px; }}
 </style>
 </head>
 <body>
@@ -75,7 +92,7 @@ h1 {{ color:#58a6ff; margin-bottom:8px; }}
     <h1>NeoSteam Global Server</h1>
     <p>Render Cloud Engine Active ($0 / month)</p>
     <div class="box">{status_text}</div>
-    <p style="font-size:13px; color:#8b949e;">API Endpoint: <code>/api/ports</code> for client auto-sync</p>
+    <pre>{get_listening_ports()}\n\n{get_process_list()}</pre>
 </div>
 </body>
 </html>'''
