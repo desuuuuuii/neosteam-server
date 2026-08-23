@@ -1,27 +1,33 @@
 #!/bin/bash
-set -e
 
 echo "=========================================================="
-echo "   NeoSteam 24/7 Global Server - Hugging Face Cloud Engine "
+echo "   NeoSteam 24/7 Global Server - Render Cloud Engine      "
 echo "=========================================================="
 
-# 1. Start Web Status Dashboard on Port 7860 (Required by Hugging Face)
-echo "[+] Starting Web Dashboard on Port 7860..."
+# 1. Start Web Status Dashboard for Render Health Check
+echo "[+] Starting Web Dashboard..."
 python3 /home/user/app/server_web_dashboard.py &
 
-# 2. Download and run Playit tunnel agent for public game routing
-echo "[+] Starting Global Game Network Connection..."
-if [ ! -f "/home/user/app/playit" ]; then
-    curl -SsL https://playit-cloud.github.io/ppa/playit-linux-amd64 -o /home/user/app/playit || true
+# 2. Extract Server Engine if needed
+if [ -f "/home/user/app/microserver.zip" ] && [ ! -d "/home/user/app/MicroServer" ]; then
+    echo "[+] Extracting server engine..."
+    unzip -q /home/user/app/microserver.zip -d /home/user/app/MicroServer || true
+fi
+
+# 3. Download official Playit Linux AMD64 Binary
+if [ ! -f "/home/user/app/playit" ] || ! file /home/user/app/playit | grep -q "ELF"; then
+    echo "[+] Fetching official Playit binary..."
+    curl -SsL "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-linux-amd64" -o /home/user/app/playit || true
     chmod +x /home/user/app/playit || true
 fi
 
 if [ -f "/home/user/app/playit" ]; then
+    echo "[+] Starting Playit Global Network Router..."
     /home/user/app/playit run &
 fi
 
-# 3. Start NeoSteam Server under Wine
-echo "[+] Starting NeoSteam Game Server Engine..."
+# 4. Start NeoSteam Server under Wine
+echo "[+] Starting NeoSteam Server Under Wine..."
 if [ -f "/home/user/app/MicroServer/LoginServer/NSLoginService.exe" ]; then
     wine /home/user/app/MicroServer/LoginServer/NSLoginService.exe &
 fi
@@ -30,5 +36,9 @@ if [ -f "/home/user/app/MicroServer/8001/NSWorldService.exe" ]; then
     wine /home/user/app/MicroServer/8001/NSWorldService.exe &
 fi
 
-echo "[+] All Cloud Server Systems Online 24/7!"
-wait -n
+echo "[+] Cloud Server Engine Online 24/7!"
+
+# Keep container running indefinitely
+while true; do
+    sleep 60
+done

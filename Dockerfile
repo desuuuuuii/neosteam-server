@@ -3,7 +3,6 @@ FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive
 ENV WINEDEBUG=-all
 
-# Install Wine 32-bit + Python + Utilities
 RUN dpkg --add-architecture i386 && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -14,12 +13,13 @@ RUN dpkg --add-architecture i386 && \
         python3-psutil \
         curl \
         wget \
+        unzip \
+        file \
         net-tools \
         procps \
         ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
-# Create Hugging Face user (UID 1000)
 RUN useradd -m -u 1000 user
 USER user
 ENV HOME=/home/user \
@@ -27,14 +27,12 @@ ENV HOME=/home/user \
 
 WORKDIR /home/user/app
 
-# Copy server files
 COPY --chown=user:user . /home/user/app
 
-# Set execution permissions
 USER root
 RUN chmod +x /home/user/app/start.sh || true
 USER user
 
-EXPOSE 7860
+EXPOSE 10000 7860
 
 CMD ["bash", "/home/user/app/start.sh"]
