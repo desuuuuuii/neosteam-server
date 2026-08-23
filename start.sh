@@ -1,22 +1,28 @@
 #!/bin/bash
 
 echo "=========================================================="
-echo "   NeoSteam 24/7 Global Server - Cloud Engine Active      "
+echo "   NeoSteam 24/7 Global Server - Authentic Cloud Engine   "
 echo "=========================================================="
 
 mkdir -p /home/user/app/config
 chmod -R 777 /home/user || true
 
-# 1. Start Zero-SQL Cloud Engine on Ports 3001 & 7001
-echo "[+] Starting Zero-SQL Cloud Game & Login Engine..."
-python3 /home/user/app/cloud_engine.py &
+# 1. Start Xvfb Virtual Framebuffer
+echo "[+] Starting Xvfb Virtual Framebuffer Display :99..."
+Xvfb :99 -screen 0 1024x768x16 -nolisten tcp &
+export DISPLAY=:99
 sleep 1
 
-# 2. Start Web Status Dashboard & Auto-Discovery API on Port $PORT
+# 2. Start Zero-SQL TDS Database Bridge on Port 1433
+echo "[+] Starting Zero-SQL TDS Database Bridge on Port 1433..."
+python3 /home/user/app/sql_bridge.py &
+sleep 1
+
+# 3. Start Web Status Dashboard & Auto-Discovery API on Port $PORT
 echo "[+] Starting Web Dashboard & Auto-Discovery API..."
 python3 /home/user/app/server_web_dashboard.py &
 
-# 3. Setup and start Bore TCP tunnels for Login (3001) & World (7001)
+# 4. Setup and start Bore TCP tunnels for Login (3001) & World (7001)
 if [ ! -f "/home/user/app/bore" ]; then
     echo "[+] Fetching Bore binary..."
     curl -SsL "https://github.com/ekzhang/bore/releases/download/v0.5.2/bore-v0.5.2-x86_64-unknown-linux-musl.tar.gz" -o /home/user/app/bore.tar.gz || true
@@ -30,7 +36,40 @@ if [ -f "/home/user/app/bore" ]; then
     /home/user/app/bore local 7001 --to bore.pub > /home/user/app/bore_game.log 2>&1 &
 fi
 
-echo "[+] Cloud Server Engine Online 24/7!"
+# Wait 2 seconds for Bore ports to allocate
+sleep 2
+
+# 5. Dynamically configure NSLoginServer.ini with assigned game port
+GAME_PORT=$(grep -oE 'bore\.pub:[0-9]+' /home/user/app/bore_game.log | awk -F: '{print $2}' | head -n 1)
+if [ -z "$GAME_PORT" ]; then
+    GAME_PORT=7001
+fi
+echo "[+] Dynamically configuring cloud LoginServer redirect to Game Port: $GAME_PORT"
+
+LOGIN_INI="/home/user/app/MicroServer/LoginServer/NSLoginServer.ini"
+if [ -f "$LOGIN_INI" ]; then
+    sed -i "s/GameServerIp1 = .*/GameServerIp1 = 159.223.110.159/g" "$LOGIN_INI" || true
+    sed -i "s/GameServerPort1 = .*/GameServerPort1 = $GAME_PORT/g" "$LOGIN_INI" || true
+fi
+
+# 6. Start Authentic NeoSteam Server Under Wine
+echo "[+] Starting Authentic NeoSteam Server Under Wine..."
+cd /home/user/app/MicroServer/LoginServer
+if [ -f "NSLoginService.exe" ]; then
+    wine NSLoginService.exe > /home/user/app/login.log 2>&1 &
+elif [ -f "NSLoginServer.exe" ]; then
+    wine NSLoginServer.exe > /home/user/app/login.log 2>&1 &
+fi
+
+cd /home/user/app/MicroServer/8001
+if [ -f "NSWorldService.exe" ]; then
+    wine NSWorldService.exe > /home/user/app/game.log 2>&1 &
+elif [ -f "NSGameServer_CN_r.exe" ]; then
+    wine NSGameServer_CN_r.exe > /home/user/app/game.log 2>&1 &
+fi
+
+cd /home/user/app
+echo "[+] Authentic Cloud Server Systems Online 24/7!"
 
 # Keep container running indefinitely
 while true; do
