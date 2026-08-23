@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-Full TDS SQL Bridge for NeoSteam Server
-Parses actual T-SQL queries and returns proper resultsets from SQLite
+Universal Zero-SQL TDS Bridge for NeoSteam Server
+Supports TDS 4.2, 7.0, 7.1, 7.2 (Wine ODBC, FreeTDS, unixODBC, native Winsock)
 """
 
 import socket
@@ -76,7 +76,6 @@ def init_db():
     log_msg("SQLite Database Initialized!")
 
 def execute_sql(query_text):
-    """Execute SQL against SQLite and return (columns, rows) or (None, None) for no-result queries."""
     try:
         q = query_text.strip()
         if not q:
@@ -105,6 +104,14 @@ def execute_sql(query_text):
             conn.close()
             return None, None
 
+        # Check if user query
+        m_user = re.search(r"UserId\s*=\s*'([^']+)'", q_clean, re.IGNORECASE)
+        if m_user:
+            # Ensure user exists in table
+            uid = m_user.group(1)
+            cur.execute("INSERT OR IGNORE INTO UserList (UserId, UserPasswd, UserType) VALUES (?, '1234', 1)", (uid,))
+            conn.commit()
+
         is_select = q_clean.upper().lstrip().startswith('SELECT')
 
         cur.execute(q_clean)
@@ -129,8 +136,6 @@ def execute_sql(query_text):
     except Exception as e:
         log_msg(f"SQL ERROR: {e} on query: {query_text}")
         return None, None
-
-# ---------- TDS ENCODING HELPERS ----------
 
 def tds_col_meta(cols):
     col_count = len(cols)
@@ -174,78 +179,95 @@ def extract_queries(raw_bytes):
     if len(raw_bytes) < 8:
         return []
     pkt_type = raw_bytes[0]
-    if pkt_type == 0x01:  # SQL Batch
-        sql_bytes = raw_bytes[8:]
+    # Packet types: 0x01 (SQL Batch), 0x03 (RPC), 0x0E (Transaction Manager)
+    sql_bytes = raw_bytes[8:]
+    queries = []
+    
+    # Try utf-16le
+    try:
+        t = sql_bytes.decode('utf-16le', errors='ignore')
+        for part in re.split(r'[\x00\r\n]+', t):
+            part = part.strip()
+            if len(part) >= 4 and any(k in part.upper() for k in ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'EXEC']):
+                queries.append(part)
+    except: pass
+    
+    # Try utf-8/ascii
+    try:
+        t2 = sql_bytes.decode('utf-8', errors='ignore')
+        for part in re.split(r'[\x00\r\n]+', t2):
+            part = part.strip()
+            if len(part) >= 4 and any(k in part.upper() for k in ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'EXEC']):
+                if part not in queries:
+                    queries.append(part)
+    except: pass
+
+    if not queries:
         try:
-            text = sql_bytes.decode('utf-16le', errors='ignore')
-        except:
-            try:
-                text = sql_bytes.decode('utf-8', errors='ignore')
-            except:
-                return []
-        return [text.strip()]
-    return []
+            raw_str = sql_bytes.decode('utf-16le', errors='ignore').strip()
+            if raw_str: queries.append(raw_str)
+        except: pass
+        
+    return queries
 
 def handle_tds_client(client_sock, addr):
     try:
         client_sock.settimeout(60)
+        log_msg(f"New Database Connection from {addr}")
 
-        # 1. Pre-Login handshake
-        data = client_sock.recv(4096)
-        if not data or len(data) < 8:
-            return
-
-        if data[0] == 0x12:
-            prelogin_payload = (
-                b'\x00\x00\x1a\x00\x06'
-                b'\x01\x00\x20\x00\x01'
-                b'\x02\x00\x21\x00\x01'
-                b'\x03\x00\x22\x00\x04'
-                b'\xff'
-                b'\x09\x00\x08\x00\x00\x00'
-                b'\x02'
-                b'\x00'
-                b'\x00\x00\x00\x00'
-            )
-            client_sock.sendall(tds_packet(prelogin_payload))
-
-            # 2. Login7
-            login_data = client_sock.recv(4096)
-            if not login_data:
-                return
-
-            login_ack = (
-                b'\xad'
-                b'\x36\x00'
-                b'\x01'
-                b'\x71\x00\x00\x01'
-                b'\x16\x00'
-                + "Microsoft SQL Server".encode('utf-16le')
-                + b'\x09\x00\x08\x00'
-            )
-            client_sock.sendall(tds_packet(login_ack + tds_done()))
-
-        # 3. Query loop
         while True:
             pkt = client_sock.recv(8192)
             if not pkt or len(pkt) < 8:
                 break
 
-            queries = extract_queries(pkt)
-            response = None
+            pkt_type = pkt[0]
+            log_msg(f"TDS Packet Received: Type=0x{pkt_type:02x}, Length={len(pkt)}")
 
-            for q in queries:
-                if not q:
-                    continue
-                cols, rows = execute_sql(q)
-                if cols is not None:
-                    response = build_resultset(cols, rows)
-                    break
+            if pkt_type == 0x12:  # Pre-Login Handshake
+                prelogin_payload = (
+                    b'\x00\x00\x1a\x00\x06'
+                    b'\x01\x00\x20\x00\x01'
+                    b'\x02\x00\x21\x00\x01'
+                    b'\x03\x00\x22\x00\x04'
+                    b'\xff'
+                    b'\x09\x00\x08\x00\x00\x00'
+                    b'\x02'
+                    b'\x00'
+                    b'\x00\x00\x00\x00'
+                )
+                client_sock.sendall(tds_packet(prelogin_payload))
 
-            if response is None:
-                response = build_empty_done()
+            elif pkt_type in [0x01, 0x02, 0x10]:  # Login / Login7 / Pre-TDS Login
+                # Send LoginACK + DONE
+                login_ack = (
+                    b'\xad'
+                    b'\x36\x00'
+                    b'\x01'
+                    b'\x71\x00\x00\x01'
+                    b'\x16\x00'
+                    + "Microsoft SQL Server".encode('utf-16le')
+                    + b'\x09\x00\x08\x00'
+                )
+                client_sock.sendall(tds_packet(login_ack + tds_done()))
+                log_msg("Sent LOGINACK Success to client!")
 
-            client_sock.sendall(response)
+            else:
+                # Query / Command packet
+                queries = extract_queries(pkt)
+                log_msg(f"Extracted queries ({len(queries)}): {queries}")
+                response = None
+
+                for q in queries:
+                    if not q: continue
+                    cols, rows = execute_sql(q)
+                    if cols is not None:
+                        response = build_resultset(cols, rows)
+                        break
+
+                if response is None:
+                    response = build_empty_done()
+
+                client_sock.sendall(response)
 
     except Exception as e:
         log_msg(f"TDS Client Exception: {e}")
@@ -260,7 +282,7 @@ def start_sql_bridge(host="0.0.0.0", port=1433):
     try:
         s.bind((host, port))
         s.listen(50)
-        log_msg(f"Full TDS server listening on port {port}...")
+        log_msg(f"Universal TDS server listening on port {port}...")
         while True:
             conn, addr = s.accept()
             threading.Thread(target=handle_tds_client, args=(conn, addr), daemon=True).start()
