@@ -2,12 +2,15 @@ FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV WINEDEBUG=-all
+ENV DISPLAY=:99
 
 RUN dpkg --add-architecture i386 && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
         wine32 \
         wine64 \
+        xvfb \
+        xauth \
         python3 \
         python3-pip \
         python3-psutil \
@@ -19,10 +22,6 @@ RUN dpkg --add-architecture i386 && \
         procps \
         ca-certificates && \
     rm -rf /var/lib/apt/lists/*
-
-# Install official Playit Agent directly into system PATH
-RUN curl -SsL "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-linux-amd64" -o /usr/local/bin/playit && \
-    chmod +x /usr/local/bin/playit
 
 RUN useradd -m -u 1000 user
 USER user
