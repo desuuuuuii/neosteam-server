@@ -20,6 +20,10 @@ RUN dpkg --add-architecture i386 && \
         ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
+# Install official Playit Agent directly into system PATH
+RUN curl -SsL "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-linux-amd64" -o /usr/local/bin/playit && \
+    chmod +x /usr/local/bin/playit
+
 RUN useradd -m -u 1000 user
 USER user
 ENV HOME=/home/user \
