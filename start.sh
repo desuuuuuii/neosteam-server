@@ -17,12 +17,19 @@ export WINEDEBUG=-all
 export WINEDLLOVERRIDES="mscoree,mshtml="
 export DISPLAY=:99
 
-# 1. Start Xvfb
-echo "[+] Starting Xvfb Virtual Framebuffer..."
-Xvfb :99 -screen 0 1024x768x16 -nolisten unix -nolisten tcp &
+# 1. Start Web Status Dashboard & Auto-Discovery API FIRST (Instant Health Check)
+echo "[+] Starting Web Dashboard & Auto-Discovery API on Port $PORT..."
+python3 /home/user/app/server_web_dashboard.py &
 sleep 1
 
-# 2. Initialize Wine prefix and configure Wine ODBC registry cleanly
+# 2. Clean any stale display locks and start Xvfb
+echo "[+] Starting Xvfb Virtual Framebuffer..."
+rm -f /tmp/.X99-lock /tmp/.X11-unix/X99 /tmp/.X*-lock 2>/dev/null || true
+pkill -9 -f Xvfb 2>/dev/null || true
+Xvfb :99 -screen 0 1024x768x16 -ac -nolisten unix -nolisten tcp &
+sleep 1
+
+# 3. Initialize Wine prefix and configure Wine ODBC registry cleanly
 echo "[+] Initializing Wine prefix..."
 wineboot --init 2>/dev/null || true
 sleep 2
@@ -33,7 +40,7 @@ wine reg add "HKLM\Software\ODBC\ODBCINST.INI\SQL Server" /v "Driver" /d "C:\win
 wine reg add "HKLM\Software\ODBC\ODBCINST.INI\SQL Server" /v "Setup" /d "C:\windows\system32\odbc32.dll" /f 2>/dev/null || true
 wine reg add "HKLM\Software\ODBC\ODBCINST.INI\SQL Server" /v "CPTimeout" /d "60" /f 2>/dev/null || true
 
-# Also configure System DSNs for Main_DB_1 and Game_DB_1_1
+# System DSNs for Main_DB_1 and Game_DB_1_1
 wine reg add "HKLM\Software\ODBC\ODBC.INI\ODBC Data Sources" /v "Main_DB_1" /d "SQL Server" /f 2>/dev/null || true
 wine reg add "HKLM\Software\ODBC\ODBC.INI\Main_DB_1" /v "Driver" /d "C:\windows\system32\odbc32.dll" /f 2>/dev/null || true
 wine reg add "HKLM\Software\ODBC\ODBC.INI\Main_DB_1" /v "Server" /d "127.0.0.1" /f 2>/dev/null || true
@@ -44,14 +51,10 @@ wine reg add "HKLM\Software\ODBC\ODBC.INI\Game_DB_1_1" /v "Driver" /d "C:\window
 wine reg add "HKLM\Software\ODBC\ODBC.INI\Game_DB_1_1" /v "Server" /d "127.0.0.1" /f 2>/dev/null || true
 wine reg add "HKLM\Software\ODBC\ODBC.INI\Game_DB_1_1" /v "Database" /d "Game_DB_1_1" /f 2>/dev/null || true
 
-# 3. Start Zero-SQL TDS Database Bridge on Port 1433
+# 4. Start Zero-SQL TDS Database Bridge on Port 1433
 echo "[+] Starting Zero-SQL TDS Database Bridge on Port 1433..."
 python3 /home/user/app/sql_bridge.py &
 sleep 1
-
-# 4. Start Web Status Dashboard & Auto-Discovery API on Port $PORT
-echo "[+] Starting Web Dashboard & Auto-Discovery API..."
-python3 /home/user/app/server_web_dashboard.py &
 
 # 5. Setup and start Bore TCP tunnels for Login (3001) & World (7001)
 if [ ! -f "/home/user/app/bore" ]; then
