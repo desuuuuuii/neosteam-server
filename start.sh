@@ -23,52 +23,52 @@ export WINEDLLOVERRIDES="mscoree,mshtml="
 export DISPLAY=:99
 
 # 1. Start Multi-Threaded Web Dashboard on Port $PORT
-echo "[+] Starting Web Dashboard on Port $PORT..."
+echo "[1/5] Starting Web Dashboard on Port $PORT..."
 python3 /home/user/app/server_web_dashboard.py &
 sleep 1
 
 # 2. Start Zero-SQL TDS Database Bridge on Port 1433
-echo "[+] Starting Zero-SQL TDS Database Bridge on Port 1433..."
+echo "[2/5] Starting Zero-SQL TDS Database Bridge on Port 1433..."
 python3 /home/user/app/sql_bridge.py &
 sleep 1
 
 # 3. Clean and start Xvfb Display
-echo "[+] Starting Xvfb Virtual Framebuffer..."
+echo "[3/5] Starting Xvfb Virtual Framebuffer..."
 rm -f /tmp/.X99-lock /tmp/.X11-unix/X99 /tmp/.X*-lock 2>/dev/null || true
 pkill -9 -f Xvfb 2>/dev/null || true
 Xvfb :99 -screen 0 1024x768x16 -ac -nolisten unix -nolisten tcp &
 sleep 1
 
 # 4. Prepare Wine prefix
-echo "[+] Preparing Wine prefix..."
+echo "[4/5] Preparing Wine prefix..."
 wineboot -u 2>/dev/null || true
-sleep 2
+sleep 3
 
 # 5. Patch all INI files to link over 127.0.0.1
-echo "[+] Configuring Cluster Interconnection..."
 find /home/user/app/MicroServer -name "*.ini" -exec sed -i 's/113\.19\.181\.110/127.0.0.1/g' {} + 2>/dev/null || true
 sed -i 's/GameServerIp1 = .*/GameServerIp1 = 127.0.0.1/g' /home/user/app/MicroServer/LoginServer/NSLoginServer.ini 2>/dev/null || true
 sed -i 's/GameServerPort1 = .*/GameServerPort1 = 7001/g' /home/user/app/MicroServer/LoginServer/NSLoginServer.ini 2>/dev/null || true
 
-# 6. Start Login Server under Wine
+# 6. Start Zone 8001 (Starter Hub) FIRST & Wait 6s for Map + NPC Loading
+echo "[5/5] Starting Zone 8001 (Starter Hub)..."
+cd /home/user/app/MicroServer/8001
+if [ -f "NSGameServer_CN_r.exe" ]; then
+    wine NSGameServer_CN_r.exe > /home/user/app/game.log 2>&1 &
+elif [ -f "NSWorldService.exe" ]; then
+    wine NSWorldService.exe > /home/user/app/game.log 2>&1 &
+fi
+echo "[+] Waiting 6 seconds for Map & NPC Loading to complete..."
+sleep 6
+
+# 7. Start Login Server under Wine (GameServer is already listening on 7001)
 echo "[+] Starting Login Server..."
 cd /home/user/app/MicroServer/LoginServer
-if [ -f "NSLoginService.exe" ]; then
-    wine NSLoginService.exe > /home/user/app/login.log 2>&1 &
-elif [ -f "NSLoginServer.exe" ]; then
+if [ -f "NSLoginServer.exe" ]; then
     wine NSLoginServer.exe > /home/user/app/login.log 2>&1 &
+elif [ -f "NSLoginService.exe" ]; then
+    wine NSLoginService.exe > /home/user/app/login.log 2>&1 &
 fi
-sleep 2
-
-# 7. Start Zone 8001 (Starter Hub)
-echo "[+] Starting Zone 8001 (Starter Hub)..."
-cd /home/user/app/MicroServer/8001
-if [ -f "NSWorldService.exe" ]; then
-    wine NSWorldService.exe > /home/user/app/game.log 2>&1 &
-elif [ -f "NSGameServer_CN_r.exe" ]; then
-    wine NSGameServer_CN_r.exe > /home/user/app/game.log 2>&1 &
-fi
-sleep 2
+sleep 3
 
 # 8. Start Bore TCP tunnels for Login (3001) & World (7001)
 echo "[+] Starting Bore TCP Port Forwarding..."
