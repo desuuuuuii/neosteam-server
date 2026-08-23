@@ -3,7 +3,6 @@ FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive
 ENV WINEDEBUG=-all
 ENV WINEDLLOVERRIDES="mscoree,mshtml="
-ENV WINEPREFIX=/home/user/.wine
 ENV DISPLAY=:99
 
 RUN dpkg --add-architecture i386 && \
@@ -12,8 +11,6 @@ RUN dpkg --add-architecture i386 && \
         wine \
         wine32:i386 \
         wine64 \
-        libodbc2:i386 \
-        odbcinst1debian2:i386 \
         xvfb \
         xauth \
         python3 \
@@ -32,13 +29,6 @@ RUN useradd -m -u 1000 user
 USER user
 ENV HOME=/home/user \
     PATH=/home/user/.local/bin:$PATH
-
-# Pre-initialize Wine prefix during build so runtime boot is instant (0.1s)
-RUN Xvfb :99 -screen 0 1024x768x16 -nolisten unix -nolisten tcp & \
-    sleep 1 && \
-    wineboot --init && \
-    wineserver -w && \
-    pkill -9 -f Xvfb || true
 
 WORKDIR /home/user/app
 

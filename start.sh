@@ -1,10 +1,16 @@
 #!/bin/bash
 
 echo "=========================================================="
-echo "   NeoSteam 24/7 Global Server - Full 4-Zone Cloud Engine "
+echo "   NeoSteam 24/7 Global Server - Cloud World Engine       "
 echo "=========================================================="
 
 mkdir -p /home/user/app/config
+
+# Per-user runtime directory
+UID_VAL=$(id -u)
+export XDG_RUNTIME_DIR=/tmp/runtime-${UID_VAL}
+mkdir -p ${XDG_RUNTIME_DIR}
+chmod 700 ${XDG_RUNTIME_DIR}
 
 export WINEPREFIX=/home/user/.wine
 export WINEDEBUG=-all
@@ -12,12 +18,12 @@ export WINEDLLOVERRIDES="mscoree,mshtml="
 export DISPLAY=:99
 
 # 1. Start Multi-Threaded Web Dashboard on Port $PORT
-echo "[+] Starting Multi-Threaded Web Dashboard on Port $PORT..."
+echo "[+] Starting Web Dashboard on Port $PORT..."
 python3 /home/user/app/server_web_dashboard.py &
 sleep 1
 
-# 2. Start Zero-SQL TDS Database Bridge on Port 1433
-echo "[+] Starting Zero-SQL TDS Database Bridge on Port 1433..."
+# 2. Start Zero-SQL Database Bridge on Port 1433
+echo "[+] Starting Zero-SQL Database Bridge on Port 1433..."
 python3 /home/user/app/sql_bridge.py &
 sleep 1
 
@@ -57,9 +63,9 @@ if [ -f "NSLoginService.exe" ]; then
 elif [ -f "NSLoginServer.exe" ]; then
     wine NSLoginServer.exe > /home/user/app/login.log 2>&1 &
 fi
-sleep 2
+sleep 3
 
-# 7. Start Zone 8001 (Starter Hub & World Router)
+# 7. Start Zone 8001 (Starter Hub - 180MB RAM Total)
 echo "[+] Starting Zone 8001 (Starter Hub)..."
 cd /home/user/app/MicroServer/8001
 if [ -f "NSWorldService.exe" ]; then
@@ -67,28 +73,9 @@ if [ -f "NSWorldService.exe" ]; then
 elif [ -f "NSGameServer_CN_r.exe" ]; then
     wine NSGameServer_CN_r.exe > /home/user/app/game.log 2>&1 &
 fi
-sleep 1
-
-if [ -d "/home/user/app/MicroServer/8002" ]; then
-    echo "[+] Starting Zone 8002 (Rogwell Republic)..."
-    cd /home/user/app/MicroServer/8002
-    wine NSGameServer_CN_r.exe > /dev/null 2>&1 &
-fi
-
-if [ -d "/home/user/app/MicroServer/8003" ]; then
-    echo "[+] Starting Zone 8003 (Taxon Continent)..."
-    cd /home/user/app/MicroServer/8003
-    wine NSGameServer_CN_r.exe > /dev/null 2>&1 &
-fi
-
-if [ -d "/home/user/app/MicroServer/8004" ]; then
-    echo "[+] Starting Zone 8004 (Elerd Kingdom)..."
-    cd /home/user/app/MicroServer/8004
-    wine NSGameServer_CN_r.exe > /dev/null 2>&1 &
-fi
 
 cd /home/user/app
-echo "[+] Full 4-Zone Cloud Server Engine Online 24/7!"
+echo "[+] NeoSteam Cloud Server Engine Online 24/7 (RAM: ~180MB / 512MB)!"
 
 # Keep container running indefinitely
 while true; do
