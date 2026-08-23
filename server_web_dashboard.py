@@ -6,57 +6,75 @@ import re
 
 PORT = int(os.environ.get('PORT', 10000))
 
-def get_playit_info():
-    log_path = "/home/user/app/playit.log"
-    if not os.path.exists(log_path):
-        return "Initializing Playit router (please wait ~5s)..."
-    try:
-        with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
-            content = f.read()
-        
-        # Search for claim URL or assigned domain
-        claim_match = re.search(r'(https://playit\.gg/claim/[a-zA-Z0-9]+)', content)
-        if claim_match:
-            return f'''<div style="margin-bottom:12px;"><a href="{claim_match.group(1)}" target="_blank" style="background:#238636; color:#fff; padding:12px 24px; border-radius:8px; text-decoration:none; font-weight:bold; font-size:16px; display:inline-block;">👉 CLICK HERE TO CLAIM YOUR GAME DOMAIN 👈</a></div><div style="font-size:13px; color:#8b949e; margin-top:8px;">Claim URL: {claim_match.group(1)}</div>'''
-        
-        domain_match = re.search(r'([a-zA-Z0-9\-]+\.(?:gl|ply|at)\.ply\.gg:\d+)', content)
-        if domain_match:
-            return f'<span style="color:#3fb950; font-size:22px; font-weight:bold;">🎮 Game Address: {domain_match.group(1)}</span>'
-        
-        # Show recent log snippet if still starting
-        lines = [line.strip() for line in content.splitlines() if line.strip()][-6:]
-        return f'<div style="text-align:left; font-family:monospace; font-size:12px; color:#58a6ff; background:#161b22; padding:10px; border-radius:6px;">' + '<br>'.join(lines) + '</div>'
-    except Exception as e:
-        return f"Status: {e}"
+def get_connection_info():
+    info_html = []
+    
+    # 1. Check Playit log
+    playit_log = "/home/user/app/playit.log"
+    if os.path.exists(playit_log):
+        try:
+            with open(playit_log, "r", encoding="utf-8", errors="ignore") as f:
+                content = f.read()
+            claim = re.search(r'(https://playit\.gg/claim/[a-zA-Z0-9]+)', content)
+            if claim:
+                info_html.append(f'<p style="margin-bottom:12px;"><a href="{claim.group(1)}" target="_blank" style="color:#58a6ff; font-weight:bold; font-size:18px; text-decoration:underline;">👉 Click Here to Claim Your Playit 24/7 Domain: {claim.group(1)}</a></p>')
+            domain = re.search(r'([a-zA-Z0-9\-]+\.(?:gl|ply|at)\.ply\.gg:\d+)', content)
+            if domain:
+                info_html.append(f'<p style="color:#3fb950; font-size:18px; font-weight:bold;">🎮 Playit Address: {domain.group(1)}</p>')
+        except Exception as e:
+            pass
+
+    # 2. Check Bore logs
+    bore_login = "/home/user/app/bore_login.log"
+    bore_game = "/home/user/app/bore_game.log"
+    bore_ports = []
+    for path, name in [(bore_login, "Login (3001)"), (bore_game, "Game (7001)")]:
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                    txt = f.read()
+                m = re.search(r'bore\.pub:(\d+)', txt)
+                if m:
+                    bore_ports.append(f"<strong>{name}:</strong> bore.pub:{m.group(1)}")
+            except:
+                pass
+    
+    if bore_ports:
+        info_html.append('<div style="margin-top:10px; color:#f0f6fc; font-size:16px;">' + " | ".join(bore_ports) + '</div>')
+
+    if not info_html:
+        return "<p style='color:#8b949e;'>Initializing connection network... Refreshing in 5s...</p>"
+    
+    return "".join(info_html)
 
 class Handler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
-        playit_status = get_playit_info()
+        conn_status = get_connection_info()
         html = f'''<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
-<meta http-equiv="refresh" content="5">
+<meta http-equiv="refresh" content="6">
 <title>NeoSteam Global MMO Server</title>
 <style>
 body {{ background:#0d1117; color:#c9d1d9; font-family:system-ui, sans-serif; display:flex; justify-content:center; align-items:center; min-height:100vh; margin:0; padding:20px; }}
-.card {{ background:#161b22; border:1px solid #30363d; border-radius:12px; padding:32px; text-align:center; max-width:640px; width:100%; box-shadow:0 8px 24px rgba(0,0,0,0.5); }}
+.card {{ background:#161b22; border:1px solid #30363d; border-radius:12px; padding:32px; text-align:center; max-width:650px; width:100%; box-shadow:0 8px 24px rgba(0,0,0,0.5); }}
 h1 {{ color:#58a6ff; margin-bottom:8px; }}
 .badge {{ background:rgba(46,160,67,0.2); color:#3fb950; border:1px solid #2ea043; padding:6px 14px; border-radius:20px; font-weight:bold; display:inline-block; margin-bottom:20px; }}
-.info-box {{ background:#21262d; border:1px solid #30363d; border-radius:8px; padding:20px; margin:20px 0; }}
+.info-box {{ background:#21262d; border:1px solid #30363d; border-radius:8px; padding:20px; margin:20px 0; word-break:break-all; line-height:1.6; }}
 </style>
 </head>
 <body>
 <div class="card">
     <div class="badge">● SERVER ONLINE 24/7</div>
     <h1>NeoSteam Global Server</h1>
-    <p style="color:#8b949e; margin-bottom:16px;">Render Cloud Engine Active ($0 / month)</p>
+    <p>Cloud Engine Active on Render ($0 / month)</p>
     
     <div class="info-box">
-        {playit_status}
+        {conn_status}
     </div>
     
-    <p style="font-size:13px; color:#8b949e;">Login & World Services active. Page refreshes every 5s automatically.</p>
+    <p style="font-size:13px; color:#8b949e;">Page refreshes automatically. Login & 3D World services running.</p>
 </div>
 </body>
 </html>'''
