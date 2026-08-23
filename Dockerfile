@@ -9,10 +9,6 @@ RUN dpkg --add-architecture i386 && \
         wine \
         wine32:i386 \
         wine64 \
-        unixodbc:i386 \
-        tdsodbc:i386 \
-        unixodbc \
-        tdsodbc \
         xvfb \
         xauth \
         python3 \
@@ -26,9 +22,6 @@ RUN dpkg --add-architecture i386 && \
         procps \
         ca-certificates && \
     rm -rf /var/lib/apt/lists/*
-
-# Configure system ODBC for FreeTDS / SQL Server
-RUN echo "[SQL Server]\nDescription = FreeTDS\nDriver = /usr/lib/i386-linux-gnu/odbc/libtdsodbc.so\nUsageCount = 1\n" > /etc/odbcinst.ini
 
 RUN useradd -m -u 1000 user
 USER user
