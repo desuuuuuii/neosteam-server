@@ -9,6 +9,8 @@ RUN dpkg --add-architecture i386 && \
         wine \
         wine32:i386 \
         wine64 \
+        libodbc2:i386 \
+        odbcinst1debian2:i386 \
         xvfb \
         xauth \
         python3 \

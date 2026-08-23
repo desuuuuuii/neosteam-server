@@ -22,24 +22,27 @@ echo "[+] Starting Xvfb Virtual Framebuffer..."
 Xvfb :99 -screen 0 1024x768x16 -nolisten unix -nolisten tcp &
 sleep 1
 
-# 2. Initialize Wine prefix and configure Wine ODBC registry
-echo "[+] Initializing Wine prefix & ODBC..."
+# 2. Initialize Wine prefix and configure Wine ODBC registry cleanly
+echo "[+] Initializing Wine prefix..."
 wineboot --init 2>/dev/null || true
 sleep 2
 
-# Register SQL Server ODBC Driver in Wine registry
-cat << 'EOF' > /tmp/odbc_reg.reg
-REGEDIT4
+# Register SQL Server driver in Wine ODBC registry using wine reg
+wine reg add "HKLM\Software\ODBC\ODBCINST.INI\ODBC Drivers" /v "SQL Server" /d "Installed" /f 2>/dev/null || true
+wine reg add "HKLM\Software\ODBC\ODBCINST.INI\SQL Server" /v "Driver" /d "C:\windows\system32\odbc32.dll" /f 2>/dev/null || true
+wine reg add "HKLM\Software\ODBC\ODBCINST.INI\SQL Server" /v "Setup" /d "C:\windows\system32\odbc32.dll" /f 2>/dev/null || true
+wine reg add "HKLM\Software\ODBC\ODBCINST.INI\SQL Server" /v "CPTimeout" /d "60" /f 2>/dev/null || true
 
-[HKEY_LOCAL_MACHINE\Software\ODBC\ODBCINST.INI\ODBC Drivers]
-"SQL Server"="Installed"
+# Also configure System DSNs for Main_DB_1 and Game_DB_1_1
+wine reg add "HKLM\Software\ODBC\ODBC.INI\ODBC Data Sources" /v "Main_DB_1" /d "SQL Server" /f 2>/dev/null || true
+wine reg add "HKLM\Software\ODBC\ODBC.INI\Main_DB_1" /v "Driver" /d "C:\windows\system32\odbc32.dll" /f 2>/dev/null || true
+wine reg add "HKLM\Software\ODBC\ODBC.INI\Main_DB_1" /v "Server" /d "127.0.0.1" /f 2>/dev/null || true
+wine reg add "HKLM\Software\ODBC\ODBC.INI\Main_DB_1" /v "Database" /d "Main_DB_1" /f 2>/dev/null || true
 
-[HKEY_LOCAL_MACHINE\Software\ODBC\ODBCINST.INI\SQL Server]
-"Driver"="C:\windows\system32\odbc32.dll"
-"Setup"="C:\windows\system32\odbc32.dll"
-"CPTimeout"="60"
-EOF
-wine regedit /tmp/odbc_reg.reg 2>/dev/null || true
+wine reg add "HKLM\Software\ODBC\ODBC.INI\ODBC Data Sources" /v "Game_DB_1_1" /d "SQL Server" /f 2>/dev/null || true
+wine reg add "HKLM\Software\ODBC\ODBC.INI\Game_DB_1_1" /v "Driver" /d "C:\windows\system32\odbc32.dll" /f 2>/dev/null || true
+wine reg add "HKLM\Software\ODBC\ODBC.INI\Game_DB_1_1" /v "Server" /d "127.0.0.1" /f 2>/dev/null || true
+wine reg add "HKLM\Software\ODBC\ODBC.INI\Game_DB_1_1" /v "Database" /d "Game_DB_1_1" /f 2>/dev/null || true
 
 # 3. Start Zero-SQL TDS Database Bridge on Port 1433
 echo "[+] Starting Zero-SQL TDS Database Bridge on Port 1433..."
