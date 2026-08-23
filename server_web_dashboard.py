@@ -4,10 +4,11 @@ import socketserver
 import os
 import re
 import json
+import urllib.request
 
 PORT = int(os.environ.get('PORT', 10000))
 
-def parse_bore_ports():
+def parse_live_ports():
     login_port = 0
     game_port = 0
     
@@ -32,73 +33,61 @@ def parse_bore_ports():
 
 class Handler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
-        login_port, game_port = parse_bore_ports()
+        login_port, game_port = parse_live_ports()
         
         # 1. API Endpoint for nsstarter.exe Auto-Discovery
-        if self.path == "/api/ports" or self.path == "/api/ports/":
-            data = json.dumps({
-                "status": "online" if (login_port and game_port) else "starting",
+        if self.path.startswith("/api/ports") or self.path.startswith("/ports"):
+            data = {
+                "status": "online" if (login_port and game_port) else "initializing",
                 "host": "159.223.110.159",
+                "domain": "bore.pub",
                 "login_port": login_port,
                 "game_port": game_port
-            }).encode('utf-8')
+            }
+            body = json.dumps(data, indent=2).encode('utf-8')
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.send_header('Access-Control-Allow-Origin', '*')
-            self.send_header('Content-Length', str(len(data)))
+            self.send_header('Content-Length', str(len(body)))
             self.end_headers()
-            self.wfile.write(data)
+            self.wfile.write(body)
             return
 
         # 2. Web UI Dashboard
-        status_color = "#3fb950" if (login_port and game_port) else "#f0883e"
-        status_text = "● SERVER ONLINE 24/7" if (login_port and game_port) else "● INITIALIZING..."
-        
-        ports_html = f'''
-        <div style="font-size:18px; margin-bottom:10px;">
-            <strong style="color:#58a6ff;">Login Server:</strong> bore.pub:{login_port or '...'}
-        </div>
-        <div style="font-size:18px;">
-            <strong style="color:#3fb950;">3D Game World:</strong> bore.pub:{game_port or '...'}
-        </div>
-        '''
-        
+        status_text = f"Login (3001): <strong>bore.pub:{login_port}</strong> | Game (7001): <strong>bore.pub:{game_port}</strong>" if (login_port and game_port) else "Initializing cloud ports... Refreshing in 5s..."
         html = f'''<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
 <meta http-equiv="refresh" content="5">
-<title>NeoSteam Global MMO Server</title>
+<title>NeoSteam Global Server</title>
 <style>
-body {{ background:#0d1117; color:#c9d1d9; font-family:system-ui, sans-serif; display:flex; justify-content:center; align-items:center; min-height:100vh; margin:0; padding:20px; }}
-.card {{ background:#161b22; border:1px solid #30363d; border-radius:12px; padding:32px; text-align:center; max-width:600px; width:100%; box-shadow:0 8px 24px rgba(0,0,0,0.5); }}
+body {{ background:#0d1117; color:#c9d1d9; font-family:system-ui, sans-serif; display:flex; justify-content:center; align-items:center; min-height:100vh; margin:0; }}
+.card {{ background:#161b22; border:1px solid #30363d; border-radius:12px; padding:32px; text-align:center; max-width:600px; }}
 h1 {{ color:#58a6ff; margin-bottom:8px; }}
-.badge {{ background:rgba(46,160,67,0.2); color:{status_color}; border:1px solid {status_color}; padding:6px 14px; border-radius:20px; font-weight:bold; display:inline-block; margin-bottom:20px; }}
-.info-box {{ background:#21262d; border:1px solid #30363d; border-radius:8px; padding:20px; margin:20px 0; word-break:break-all; line-height:1.6; }}
+.badge {{ background:rgba(46,160,67,0.2); color:#3fb950; border:1px solid #2ea043; padding:6px 14px; border-radius:20px; font-weight:bold; display:inline-block; margin-bottom:20px; }}
+.box {{ background:#21262d; border:1px solid #30363d; border-radius:8px; padding:16px; margin:20px 0; font-size:16px; color:#f0f6fc; }}
 </style>
 </head>
 <body>
 <div class="card">
-    <div class="badge">{status_text}</div>
+    <div class="badge">● SERVER ONLINE 24/7</div>
     <h1>NeoSteam Global Server</h1>
-    <p>Cloud Engine Active on Render ($0 / month)</p>
-    
-    <div class="info-box">
-        {ports_html}
-    </div>
-    
-    <p style="font-size:13px; color:#8b949e;">Auto-Discovery API Active. Launch <strong>nsstarter.exe</strong> to play.</p>
+    <p>Render Cloud Engine Active ($0 / month)</p>
+    <div class="box">{status_text}</div>
+    <p style="font-size:13px; color:#8b949e;">API Endpoint: <code>/api/ports</code> for client auto-sync</p>
 </div>
 </body>
 </html>'''
+        body = html.encode('utf-8')
         self.send_response(200)
         self.send_header('Content-Type', 'text/html; charset=utf-8')
-        self.send_header('Content-Length', str(len(html.encode('utf-8'))))
+        self.send_header('Content-Length', str(len(body)))
         self.end_headers()
-        self.wfile.write(html.encode('utf-8'))
+        self.wfile.write(body)
 
     def log_message(self, format, *args): pass
 
-print(f'[HTTP] Dashboard & API listening on port {PORT}...')
+print(f'[HTTP] Dashboard listening on port {PORT}...')
 with socketserver.TCPServer(('0.0.0.0', PORT), Handler) as httpd:
     httpd.serve_forever()
